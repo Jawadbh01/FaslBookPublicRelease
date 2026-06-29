@@ -86,7 +86,7 @@ export default function LedgerReportPage() {
 };
         return {
           id: d.id,
-          type: data.type,
+          type: data.type as "credit" | "debit",
           date: data.date || "",
           category: data.category || "other",
           categoryLabel: data.categoryLabel || (data.type === "credit" ? INCOME_LABELS[data.category] : EXPENSE_LABELS[data.category]) || data.category,
