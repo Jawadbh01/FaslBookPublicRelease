@@ -84,7 +84,7 @@ export default function OverviewPage() {
     if (Notification.permission !== "default") return;
     const t = setTimeout(() => {
   if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission().catch(console.error);
+    Notification.requestPermission().then(() => {}).catch(() => {});
   }
 }, 3000);
     return () => clearTimeout(t);
