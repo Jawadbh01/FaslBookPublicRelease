@@ -78,18 +78,7 @@ export default function OverviewPage() {
   }, [router]);
 
   // Request push notification permission (after 3 s delay, first visit only)
-  useEffect(() => {
-    if (!orgId) return;
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission !== "default") return;
-    const t = setTimeout(() => {
-  if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission().then(() => {}).catch(() => {});
-  }
-}, 3000);
-    return () => clearTimeout(t);
-  }, [orgId]);
-
+  
   // ── State ────────────────────────────────────────────────────
   const [userName, setUserName]           = useState<string>("");
   const [income, setIncome]               = useState(0);
