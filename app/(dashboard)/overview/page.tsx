@@ -326,7 +326,8 @@ export default function OverviewPage() {
               </Link>
             )}
             <SyncIndicator />
-            <NotificationBell organizationId={organization?.id ?? null} iconColor="white" />
+            <NotificationBell
+organizationId={organization?.id ?? null} />
           </div>
         </div>
       </div>
