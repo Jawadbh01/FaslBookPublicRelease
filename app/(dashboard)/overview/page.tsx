@@ -83,10 +83,10 @@ export default function OverviewPage() {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "default") return;
     const t = setTimeout(() => {
-      import("@/lib/firebase/config")
-        .then(({ requestNotificationPermission }) => requestNotificationPermission(orgId))
-        .catch(console.error);
-    }, 3000);
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().catch(console.error);
+  }
+}, 3000);
     return () => clearTimeout(t);
   }, [orgId]);
 
