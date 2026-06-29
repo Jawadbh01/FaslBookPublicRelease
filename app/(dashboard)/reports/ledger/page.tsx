@@ -74,10 +74,19 @@ export default function LedgerReportPage() {
       const snap = await getDocs(query(collection(db, "ledgerEntries"), where("organizationId", "==", orgId)));
       const start = getStartStr(range);
       const list: Entry[] = snap.docs.map(d => {
-        const data = d.data();
+        const data = d.data() as {
+  type: "credit" | "debit";
+  date?: string;
+  category?: string;
+  categoryLabel?: string;
+  amount?: number;
+  parcelName?: string;
+  dealerName?: string;
+  notes?: string;
+};
         return {
           id: d.id,
-          type: (data.type === "credit" ? "credit" : "debit") as "credit" | "debit",
+          type: data.type,
           date: data.date || "",
           category: data.category || "other",
           categoryLabel: data.categoryLabel || (data.type === "credit" ? INCOME_LABELS[data.category] : EXPENSE_LABELS[data.category]) || data.category,
