@@ -84,8 +84,6 @@ export default function LedgerReportPage() {
   dealerName?: string;
   notes?: string;
 };
-          date: data.date || "",
-          category: data.category || "other",
 
 return {
   id: d.id,
