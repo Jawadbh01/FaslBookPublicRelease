@@ -1,6 +1,3 @@
-cat > "/home/claude/ledger_report_fixed.tsx" << 'ENDOFFILE'
-"use client";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, query, where, getDocs } from "firebase/firestore";
