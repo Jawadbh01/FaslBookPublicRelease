@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { WifiOff, CloudOff } from "lucide-react";
 
-export default function SyncIndicator() {
+export default function SyncIndicator(_props?: { iconColor?: string }) {
   const [online, setOnline]         = useState(true);
   const [showBanner, setShowBanner] = useState(false);
 
