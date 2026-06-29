@@ -84,23 +84,25 @@ export default function LedgerReportPage() {
   dealerName?: string;
   notes?: string;
 };
-        return {
-          id: d.id,
-          type: data.type as "credit" | "debit",
           date: data.date || "",
           category: data.category || "other",
-          categoryLabel:
-  data.categoryLabel ||
-  (data.type === "credit"
-    ? INCOME_LABELS[data.category || "other"]
-    : EXPENSE_LABELS[data.category || "other"]) ||
-  data.category ||
-  "other",
-          amount: Number(data.amount) || 0,
-          parcelName: data.parcelName || "",
-          dealerName: data.dealerName || "",
-          notes: data.notes || "",
-        };
+
+return {
+  id: d.id,
+  type: data.type as "credit" | "debit",
+  date: data.date || "",
+  category,
+  categoryLabel:
+    data.categoryLabel ||
+    (data.type === "credit"
+      ? INCOME_LABELS[category as keyof typeof INCOME_LABELS]
+      : EXPENSE_LABELS[category as keyof typeof EXPENSE_LABELS]) ||
+    category,
+  amount: Number(data.amount) || 0,
+  parcelName: data.parcelName || "",
+  dealerName: data.dealerName || "",
+  notes: data.notes || "",
+};
       }).filter(e => !start || e.date >= start)
         .sort((a, b) => b.date.localeCompare(a.date));
       setEntries(list);
