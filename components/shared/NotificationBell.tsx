@@ -51,7 +51,7 @@ function cfgFor(type: NotifType) {
 // ── Component ────────────────────────────────────────────────
 export default function NotificationBell({
   organizationId,
-  iconColor = "#1B5E20",
+  iconColor = "white",
 }: {
   organizationId: string | null;
   iconColor?: string;
