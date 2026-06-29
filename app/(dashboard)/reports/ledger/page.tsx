@@ -89,7 +89,13 @@ export default function LedgerReportPage() {
           type: data.type as "credit" | "debit",
           date: data.date || "",
           category: data.category || "other",
-          categoryLabel: data.categoryLabel || (data.type === "credit" ? INCOME_LABELS[data.category] : EXPENSE_LABELS[data.category]) || data.category,
+          categoryLabel:
+  data.categoryLabel ||
+  (data.type === "credit"
+    ? INCOME_LABELS[data.category || "other"]
+    : EXPENSE_LABELS[data.category || "other"]) ||
+  data.category ||
+  "other",
           amount: Number(data.amount) || 0,
           parcelName: data.parcelName || "",
           dealerName: data.dealerName || "",
