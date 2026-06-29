@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd artifacts/faslbook && npm install -g pnpm && pnpm install && pnpm build",
+  "outputDirectory": "artifacts/faslbook/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
