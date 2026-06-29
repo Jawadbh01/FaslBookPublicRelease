@@ -84,7 +84,7 @@ export default function LedgerReportPage() {
   dealerName?: string;
   notes?: string;
 };
-
+const category = data.category || "other";
 return {
   id: d.id,
   type: data.type as "credit" | "debit",
