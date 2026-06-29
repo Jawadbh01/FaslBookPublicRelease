@@ -1,6 +1,7 @@
 
 
 import { useEffect, useState } from "react";
+import { useParams } from "wouter";
 import { doc, onSnapshot, collection, query, where, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";

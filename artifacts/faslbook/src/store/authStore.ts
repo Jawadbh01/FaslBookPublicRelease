@@ -38,7 +38,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "faslbook-auth",
-      partialState: (state: AuthState) => ({
+      partialize: (state: AuthState) => ({
         organization: state.organization,
         role: state.role,
       }),

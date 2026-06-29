@@ -75,7 +75,7 @@ export default function OverviewPage() {
     // prefetch removed;
     // prefetch removed;
     // prefetch removed;
-  }, [router]);
+  }, []);
 
   // Request push notification permission (after 3 s delay, first visit only)
   

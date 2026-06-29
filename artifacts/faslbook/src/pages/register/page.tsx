@@ -25,8 +25,7 @@ const roleConfig: Record<string, {
 };
 
 export default function RegisterPage() {
-  
-  // searchParams removed;
+  const searchParams = new URLSearchParams(window.location.search);
   const role   = searchParams.get("role") || "landlord";
   const config = roleConfig[role] || roleConfig.landlord;
   const Icon   = config.icon;

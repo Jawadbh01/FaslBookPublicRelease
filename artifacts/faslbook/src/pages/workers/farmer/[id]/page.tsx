@@ -1,6 +1,7 @@
 
 
 import { useEffect, useState } from "react";
+import { useParams } from "wouter";
 import {
   collection, query, where, onSnapshot,
   doc, getDoc,

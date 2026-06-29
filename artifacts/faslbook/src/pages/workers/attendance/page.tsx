@@ -14,7 +14,7 @@ interface WorkerDoc {
   id: string;
   name: string;
   phone?: string;
-  workerType: "daily" | "monthly";
+  workerType: "daily" | "monthly" | "farmer" | string;
   dailyRate?: number;
   monthlySalary?: number;
   status: string;
@@ -33,7 +33,7 @@ interface MergedWorker {
   id: string;
   name: string;
   phone: string;
-  workerType: "daily" | "monthly";
+  workerType: "daily" | "monthly" | string;
   dailyRate: number;
   monthlySalary: number;
   source: "worker" | "user";
@@ -44,7 +44,7 @@ type AttStatus = "present" | "halfDay" | "absent" | null;
 interface AttRow {
   workerId: string;
   workerName: string;
-  workerType: "daily" | "monthly";
+  workerType: "daily" | "monthly" | string;
   dailyRate: number;
   monthlySalary: number;
   status: AttStatus;

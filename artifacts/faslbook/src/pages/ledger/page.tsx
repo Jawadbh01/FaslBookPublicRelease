@@ -120,7 +120,7 @@ function ReceiptModal({ url, onClose }: { url: string; onClose: () => void }) {
 
 export default function LedgerPage() {
   const { organization, role } = useAuthStore();
-  // searchParams removed;
+  const searchParams = new URLSearchParams(window.location.search);
   const [, navigate] = useLocation();
   const orgId   = organization?.id;
   const canEdit = role === "landlord" || role === "manager";

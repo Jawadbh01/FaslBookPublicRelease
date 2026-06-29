@@ -9,6 +9,7 @@ import {
   ArrowLeft, Wheat, Calendar, MapPin,
   User, Loader2, CheckCircle, Package, Check,
 } from "lucide-react";
+import { useParams } from "wouter";
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; step: number }> = {
   planned:   { label: "Planned",   color: "#1565C0", bg: "#E3F2FD", step: 1 },
@@ -22,8 +23,8 @@ const statusConfig: Record<string, { label: string; color: string; bg: string; s
 const units = ["Maund", "KG", "Ton", "Quintal", "Bag", "Litre"];
 
 export default function CropDetailPage() {
-  const { id } = useParams();
-  // searchParams removed;
+  const { id } = useParams<{ id: string }>();
+  const searchParams = new URLSearchParams(window.location.search);
   
   const { organization, role } = useAuthStore();
   const canEdit = role === "landlord" || role === "manager";
