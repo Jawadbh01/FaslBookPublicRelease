@@ -2,7 +2,6 @@ import { useLocation } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { useLangStore } from "@/store/langStore";
 import { useAuthStore } from "@/store/authStore";
-import SyncIndicator from "@/components/shared/SyncIndicator";
 import NotificationBell from "@/components/shared/NotificationBell";
 
 const MAIN_NAV = ["/ledger", "/inventory", "/dealers", "/workers"];
@@ -51,8 +50,7 @@ export default function TopBar() {
       <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm">
         <div className="flex items-center justify-between h-14 px-4">
           <span className="font-bold text-lg text-gray-800">{title}</span>
-          <div className="flex items-center gap-1">
-            <SyncIndicator iconColor="#1B5E20" />
+          <div className="flex items-center gap-2">
             <NotificationBell organizationId={orgId} iconColor="#1B5E20" />
           </div>
         </div>
@@ -65,13 +63,13 @@ export default function TopBar() {
       <div className="flex items-center h-14 px-2 gap-2">
         <button
           onClick={() => window.history.back()}
-          className="p-2 rounded-full hover:bg-white/10 transition-colors flex items-center gap-1"
+          className="p-2 rounded-full hover:bg-white/10 active:bg-white/20 transition-colors flex items-center"
           aria-label="Go back"
+          style={{ WebkitTapHighlightColor: "transparent" }}
         >
           <ChevronLeft size={24} color="white" />
         </button>
         <span className="font-bold text-lg text-white flex-1">{title}</span>
-        <SyncIndicator iconColor="white" />
         <NotificationBell organizationId={orgId} iconColor="white" />
       </div>
     </header>
