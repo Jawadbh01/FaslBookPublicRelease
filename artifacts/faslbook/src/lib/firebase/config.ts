@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, browserLocalPersistence, setPersistence } from "firebase/auth";
 import {
   initializeFirestore,
   persistentLocalCache,
@@ -20,6 +20,9 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
+
+// Force local persistence — user stays logged in even if browser forgets IndexedDB
+setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
