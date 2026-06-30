@@ -118,36 +118,39 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
+      {/* Banner section — uses banner.png, fallback to solid green */}
       <div
-        className="flex flex-col items-center justify-center pt-16 pb-10 px-6"
-        style={{ backgroundColor: "#1B5E20" }}
+        className="relative flex flex-col items-center justify-center pt-14 pb-10 px-6 overflow-hidden"
+        style={{
+          backgroundImage: "url(/banner.png)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          minHeight: 260,
+        }}
       >
-        <div className="bg-white rounded-full p-2 mb-4 shadow-lg overflow-hidden w-20 h-20 flex items-center justify-center">
-          <img
-            src={ASSETS.logo}
-            alt="FaslBook Logo"
-            className="w-16 h-16 object-contain"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-              const parent = e.currentTarget.parentElement;
-              if (parent) {
-                const icon = document.createElement("div");
-                icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#1B5E20" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 0 2h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1 0-2h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/></svg>';
-                parent.appendChild(icon.firstChild!);
-              }
-            }}
-          />
+        {/* Dark overlay so text is readable over any banner */}
+        <div className="absolute inset-0" style={{ backgroundColor: "rgba(10,50,10,0.55)" }} />
+
+        <div className="relative z-10 flex flex-col items-center">
+          <div className="bg-white rounded-full p-2 mb-4 shadow-lg overflow-hidden w-20 h-20 flex items-center justify-center">
+            <img
+              src={ASSETS.logo}
+              alt="FaslBook Logo"
+              className="w-16 h-16 object-contain"
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+            />
+          </div>
+          <h1 className="text-white text-4xl font-bold tracking-wide drop-shadow-md">
+            FaslBook
+          </h1>
+          <p className="text-green-200 text-sm mt-1">Farm Operating System</p>
+          <p className="text-green-100 text-xl mt-3 font-semibold">
+            خوش آمدید
+          </p>
+          <p className="text-green-200 text-xs mt-1 text-center px-8">
+            Manage your farm, finances & team all in one place
+          </p>
         </div>
-        <h1 className="text-white text-4xl font-bold tracking-wide">
-          FaslBook
-        </h1>
-        <p className="text-green-200 text-sm mt-1">Farm Operating System</p>
-        <p className="text-green-100 text-xl mt-3 font-semibold">
-          خوش آمدید
-        </p>
-        <p className="text-green-200 text-xs mt-1 text-center px-8">
-          Manage your farm, finances & team all in one place
-        </p>
       </div>
 
       <div className="flex-1 bg-white rounded-t-3xl -mt-4 px-6 pt-8 pb-10">
