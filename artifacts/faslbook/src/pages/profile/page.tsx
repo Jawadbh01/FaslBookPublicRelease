@@ -56,7 +56,10 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const currentUser = auth.currentUser;
-    if (!currentUser) return;
+    if (!currentUser) {
+      setError("You must be logged in to upload a photo.");
+      return;
+    }
 
     // Show preview INSTANTLY from local file — no waiting
     const localUrl = URL.createObjectURL(file);
@@ -67,19 +70,38 @@ export default function ProfilePage() {
     // Upload in background — UI is already updated
     (async () => {
       try {
+        console.log("[Profile] Starting photo upload for uid:", currentUser.uid);
+        console.log("[Profile] File:", file.name, `${(file.size / 1024).toFixed(1)} KB`);
+
         const compressed = await compressImage(file, { maxWidth: 250, quality: 0.35 });
+        console.log("[Profile] Compressed to:", `${(compressed.size / 1024).toFixed(1)} KB`);
+
         const storageRef = ref(storage, `profiles/${currentUser.uid}/photo.jpg`);
+        console.log("[Profile] Uploading to:", storageRef.fullPath);
+
         await uploadBytes(storageRef, compressed);
+        console.log("[Profile] uploadBytes OK");
+
         const url = await getDownloadURL(storageRef);
+        console.log("[Profile] Download URL obtained");
+
         await updateDoc(doc(db, "users", currentUser.uid), { photoUrl: url });
         setPhotoUrl(url);
         URL.revokeObjectURL(localUrl);
+        console.log("[Profile] Photo upload complete ✓");
       } catch (err: any) {
-        console.error("Photo upload error:", err);
-        if (err?.code === "storage/unauthorized") {
-          setError("Storage permission denied — allow authenticated writes in Firebase Storage rules.");
+        const code = err?.code ?? "unknown";
+        const msg  = err?.message ?? "";
+        console.error("[Profile] Photo upload FAILED — code:", code, "| message:", msg, err);
+
+        if (code === "storage/unauthorized") {
+          setError("Permission denied (storage/unauthorized). Fix Firebase Storage Rules → allow write: if request.auth != null;");
+        } else if (code === "unauthenticated") {
+          setError("Not logged in — please log out and back in.");
+        } else if (code === "cors" || msg.includes("CORS")) {
+          setError("CORS error — Firebase Storage is blocking this domain. Configure CORS in Firebase Console.");
         } else {
-          setError("Upload failed. Photo shown locally but not saved.");
+          setError(`Upload failed (${code}). Photo shown locally but not saved. Check browser console for details.`);
         }
       } finally {
         setUploadingPhoto(false);
