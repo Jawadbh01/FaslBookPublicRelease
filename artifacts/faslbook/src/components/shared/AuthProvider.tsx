@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -89,7 +88,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           const orgData = orgSnap.exists() ? orgSnap.data() : null;
           if (orgData) setOrganization(orgData as any);
 
-          // Update cache with fresh data
           saveCache(firebaseUser, orgData, userData.role);
           setUser(firebaseUser);
           setLoading(false);
@@ -99,17 +97,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
         } catch {
           // Offline — already loaded from cache, continue normally
-          console.log("FaslBook: offline mode, using cached auth");
           setLoading(false);
           setReady(true);
         }
 
       } else {
-        // Firebase says no user
+        // Firebase says no user — trust cache if present (offline scenario)
         const { user: cached } = loadCache();
         if (cached) {
-          // We have cache — user is offline, NOT logged out
-          console.log("FaslBook: no Firebase user but cache exists — offline mode");
           setLoading(false);
           setReady(true);
           return;
@@ -130,10 +125,32 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   if (!ready) {
     return (
-      <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", backgroundColor:"white", gap:16 }}>
-        <img src="/logo.png" alt="FaslBook" style={{ width:72, height:72, objectFit:"contain", borderRadius:14 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display="none"; }} />
-        <div style={{ width:40, height:40, borderRadius:"50%", border:"4px solid #e5e7eb", borderTopColor:"#1B5E20", animation:"spin 0.8s linear infinite" }} />
-        <p style={{ color:"#9ca3af", fontSize:14 }}>Loading FaslBook…</p>
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundImage: "url(/splash.png)",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+        }}
+      >
+        {/* Dark scrim so spinner is visible against any splash image */}
+        <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.35)" }} />
+        <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+          <img
+            src="/logo.png"
+            alt="FaslBook"
+            style={{ width: 72, height: 72, objectFit: "contain", borderRadius: 14 }}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+          />
+          <div style={{ width: 36, height: 36, borderRadius: "50%", border: "4px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.8s linear infinite" }} />
+          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>Loading FaslBook…</p>
+        </div>
         <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
