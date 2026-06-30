@@ -19,7 +19,7 @@ import {
   BarChart2, User, Handshake, Warehouse, Map,
 } from "lucide-react";
 import { Link } from "wouter";
-import SyncIndicator from "@/components/shared/SyncIndicator";
+import CloudStatusIcon from "@/components/shared/CloudStatusIcon";
 import NotificationBell from "@/components/shared/NotificationBell";
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -314,9 +314,8 @@ export default function OverviewPage() {
                 </div>
               </Link>
             )}
-            <SyncIndicator />
-            <NotificationBell
-organizationId={organization?.id ?? null} />
+            <CloudStatusIcon color="white" size={18} />
+            <NotificationBell organizationId={organization?.id ?? null} />
           </div>
         </div>
       </div>
