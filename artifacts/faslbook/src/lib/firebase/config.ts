@@ -31,5 +31,9 @@ export const db = initializeFirestore(app, {
   }),
 });
 
-export const storage = getStorage(app);
+// Pass explicit gs:// bucket URL — required for new .firebasestorage.app buckets
+// (Firebase SDK v10+ needs this explicit form to reliably resolve the correct endpoint)
+const bucketUrl = `gs://${import.meta.env.VITE_FIREBASE_STORAGE_BUCKET}`;
+export const storage = getStorage(app, bucketUrl);
+
 export default app;
