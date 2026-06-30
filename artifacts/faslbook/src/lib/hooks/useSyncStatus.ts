@@ -4,14 +4,45 @@ import { db } from "@/lib/firebase/config";
 
 export type SyncState = "online" | "syncing" | "synced" | "offline";
 
+const LAST_SYNCED_KEY = "faslbook_last_synced";
+
+function saveLastSynced() {
+  try { localStorage.setItem(LAST_SYNCED_KEY, Date.now().toString()); } catch {}
+}
+
+function loadLastSynced(): number | null {
+  try {
+    const v = localStorage.getItem(LAST_SYNCED_KEY);
+    return v ? parseInt(v) : null;
+  } catch { return null; }
+}
+
+export function formatLastSynced(ts: number | null): string {
+  if (!ts) return "Never synced";
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 10)  return "Just now";
+  if (diff < 60)  return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 export function useSyncStatus() {
-  const [state, setState]             = useState<SyncState>(navigator.onLine ? "online" : "offline");
-  const [pendingCount, setPendingCount] = useState(0);
+  const [state, setState]         = useState<SyncState>(navigator.onLine ? "online" : "offline");
+  const [lastSynced, setLastSynced] = useState<number | null>(loadLastSynced);
   const syncingRef = useRef(false);
-  const pendingRef = useRef(0);
 
   useEffect(() => {
     let unsubSync: () => void;
+
+    const markSynced = () => {
+      const now = Date.now();
+      saveLastSynced();
+      setLastSynced(now);
+      syncingRef.current = false;
+      setState("synced");
+      setTimeout(() => setState("online"), 2500);
+    };
 
     const checkPending = async () => {
       if (!navigator.onLine) return;
@@ -19,19 +50,12 @@ export function useSyncStatus() {
         syncingRef.current = true;
         setState("syncing");
         await waitForPendingWrites(db);
-        syncingRef.current = false;
-        setState("synced");
-        setPendingCount(0);
-        pendingRef.current = 0;
-        setTimeout(() => setState("online"), 2000);
-      } catch {
-        // ignore — offline
-      }
+        markSynced();
+      } catch { /* offline */ }
     };
 
     const handleOnline = async () => {
-      try { await enableNetwork(db); } catch { /* ignore */ }
-      setState("syncing");
+      try { await enableNetwork(db); } catch {}
       await checkPending();
     };
 
@@ -43,19 +67,18 @@ export function useSyncStatus() {
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
 
-    // Track pending writes by listening to sync events
     try {
       unsubSync = onSnapshotsInSync(db, () => {
         if (navigator.onLine && syncingRef.current) {
-          syncingRef.current = false;
-          setState("synced");
-          setTimeout(() => setState("online"), 2000);
+          markSynced();
         }
       });
-    } catch { /* ignore */ }
+    } catch {}
 
-    // Set initial state
-    if (!navigator.onLine) {
+    // Track initial sync automatically
+    if (navigator.onLine) {
+      checkPending();
+    } else {
       setState("offline");
     }
 
@@ -73,12 +96,15 @@ export function useSyncStatus() {
       await disableNetwork(db);
       await enableNetwork(db);
       await waitForPendingWrites(db);
+      const now = Date.now();
+      saveLastSynced();
+      setLastSynced(now);
       setState("synced");
-      setTimeout(() => setState("online"), 2000);
+      setTimeout(() => setState("online"), 2500);
     } catch {
       setState(navigator.onLine ? "online" : "offline");
     }
   };
 
-  return { state, pendingCount, syncNow };
+  return { state, lastSynced, syncNow };
 }
