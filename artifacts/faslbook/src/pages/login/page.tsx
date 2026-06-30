@@ -103,26 +103,39 @@ export default function LoginPage() {
     }
   };
 
-  // ── Loading / redirecting — use splash as background ─────────
+  // ── Loading / redirecting screen ─────────────────────────────
   if (loading) {
     return (
-      <div
-        style={{
-          position: "fixed", inset: 0,
-          backgroundImage: "url(/splash.png)",
-          backgroundSize: "cover", backgroundPosition: "center",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", gap: 16,
-        }}
-      >
-        <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.4)" }} />
-        <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-          <img src="/logo.png" alt="FaslBook" style={{ width: 64, height: 64, borderRadius: 14, objectFit: "contain" }}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-          <div style={{ width: 34, height: 34, borderRadius: "50%", border: "4px solid rgba(255,255,255,0.25)", borderTopColor: "white", animation: "spin 0.8s linear infinite" }} />
-          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>Signing in…</p>
+      <div style={{
+        position: "fixed", inset: 0,
+        background: "linear-gradient(160deg, #1B5E20 0%, #2E7D32 50%, #1B5E20 100%)",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+      }}>
+        {/* Logo */}
+        <img src="/logo.png" alt="FaslBook"
+          style={{ width: 80, height: 80, borderRadius: 20, objectFit: "contain", marginBottom: 24, boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+
+        <p style={{ color: "white", fontSize: 26, fontWeight: 700, letterSpacing: 0.5, marginBottom: 6 }}>FaslBook</p>
+        <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 12, marginBottom: 40 }}>Signing in…</p>
+
+        {/* Horizontal loading bar */}
+        <div style={{ width: 200, height: 4, borderRadius: 9999, backgroundColor: "rgba(255,255,255,0.2)", overflow: "hidden" }}>
+          <div style={{
+            height: "100%", width: "40%", borderRadius: 9999,
+            backgroundColor: "white",
+            animation: "slide 1.4s ease-in-out infinite",
+          }} />
         </div>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
+        <style>{`
+          @keyframes slide {
+            0%   { transform: translateX(-100px); opacity: 0.6; }
+            50%  { transform: translateX(80px);  opacity: 1; }
+            100% { transform: translateX(260px); opacity: 0.6; }
+          }
+        `}</style>
       </div>
     );
   }
@@ -161,7 +174,7 @@ export default function LoginPage() {
       </div>
 
       {/* ── Login card ───────────────────────────────────────────── */}
-      <div className="flex-1 bg-white rounded-t-3xl -mt-3 px-5 pt-6 pb-8">
+      <div className="flex-1 bg-white rounded-t-3xl -mt-3 px-5 pt-10 pb-8">
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-4">
