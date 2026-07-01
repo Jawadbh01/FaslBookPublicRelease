@@ -1,0 +1,9 @@
+{
+  "buildCommand": "pnpm --filter @workspace/faslbook run build",
+  "outputDirectory": "artifacts/faslbook/dist",
+  "installCommand": "pnpm install",
+  "framework": null,
+  "env": {
+    "BASE_PATH": "/"
+  }
+}
