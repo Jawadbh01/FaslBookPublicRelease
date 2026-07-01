@@ -10,7 +10,10 @@ const ORG_KEY  = "faslbook_org_cache";
 
 function saveCache(user: any, org: any, role: string) {
   try {
-    localStorage.setItem(USER_KEY, JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName, photoURL: user.photoURL, role }));
+    localStorage.setItem(USER_KEY, JSON.stringify({
+      uid: user.uid, email: user.email,
+      displayName: user.displayName, photoURL: user.photoURL, role,
+    }));
     if (org) localStorage.setItem(ORG_KEY, JSON.stringify(org));
   } catch {}
 }
@@ -40,6 +43,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const path = window.location.pathname;
     const { user: cachedUser, org: cachedOrg } = loadCache();
 
+    // ── Cached user → unblock immediately, no waiting for Firebase ──
     if (cachedUser) {
       setUser(cachedUser as any);
       setRole(cachedUser.role);
@@ -48,7 +52,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       setReady(true);
 
       if (PUBLIC.includes(path)) {
-        // farmers don't have an app — redirect to login
         if (cachedUser.role === "farmer") {
           window.location.replace("/login");
         } else {
@@ -56,7 +59,9 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         }
         return;
       }
+      // Already on a protected page — stay there (offline-safe)
     } else {
+      // No cache at all — redirect to login unless already on public page
       if (!PUBLIC.includes(path)) {
         window.location.replace("/login");
         return;
@@ -64,74 +69,76 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       setReady(true);
     }
 
+    // ── Background Firebase check (non-blocking, updates cache silently) ──
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const userSnap = await getDoc(doc(db, "users", firebaseUser.uid));
-          if (!userSnap.exists()) {
-            if (!PUBLIC.includes(path)) window.location.replace("/role-select");
-            return;
-          }
-          const userData = userSnap.data();
-          setRole(userData.role);
-
-          if (!userData.role) {
-            if (!PUBLIC.includes(path)) window.location.replace("/role-select");
-            return;
-          }
-
-          // Farmers cannot log in — send them back to login with a message
-          if (userData.role === "farmer") {
-            clearAuthCache();
-            setUser(null);
-            setOrganization(null);
-            setRole(null);
-            setLoading(false);
-            setReady(true);
-            window.location.replace("/login?farmer=1");
-            return;
-          }
-
-          if (!userData.organizationId) {
-            if (userData.role === "landlord" && path !== "/create-farm") {
-              window.location.replace("/create-farm");
-            } else if (userData.role !== "landlord" && path !== "/join-farm" && path !== "/pending") {
-              window.location.replace("/join-farm");
-            }
-            setReady(true);
-            return;
-          }
-
-          const orgSnap = await getDoc(doc(db, "organizations", userData.organizationId));
-          const orgData = orgSnap.exists() ? orgSnap.data() : null;
-          if (orgData) setOrganization(orgData as any);
-
-          saveCache(firebaseUser, orgData, userData.role);
-          setUser(firebaseUser);
-          setLoading(false);
-          setReady(true);
-
-          if (PUBLIC.includes(path)) window.location.replace("/overview");
-
-        } catch {
-          setLoading(false);
-          setReady(true);
-        }
-
-      } else {
+      if (!firebaseUser) {
+        // Firebase says no user — only clear if we have no cache (true logout)
         const { user: cached } = loadCache();
-        if (cached) {
+        if (!cached) {
+          clearAuthCache();
+          setUser(null);
+          setOrganization(null);
+          setRole(null);
           setLoading(false);
+          setReady(true);
+          if (!PUBLIC.includes(path)) window.location.replace("/login");
+        }
+        // If we DO have a cache, we're offline — trust the cache and stay put
+        setReady(true);
+        return;
+      }
+
+      try {
+        const userSnap = await getDoc(doc(db, "users", firebaseUser.uid));
+        if (!userSnap.exists()) {
+          if (!PUBLIC.includes(path)) window.location.replace("/role-select");
           setReady(true);
           return;
         }
-        clearAuthCache();
-        setUser(null);
-        setOrganization(null);
-        setRole(null);
+
+        const userData = userSnap.data();
+
+        if (!userData.role) {
+          if (!PUBLIC.includes(path)) window.location.replace("/role-select");
+          setReady(true);
+          return;
+        }
+
+        // Farmers cannot log in
+        if (userData.role === "farmer") {
+          clearAuthCache();
+          setUser(null); setOrganization(null); setRole(null);
+          setLoading(false); setReady(true);
+          window.location.replace("/login?farmer=1");
+          return;
+        }
+
+        if (!userData.organizationId) {
+          if (userData.role === "landlord" && path !== "/create-farm") {
+            window.location.replace("/create-farm");
+          } else if (userData.role !== "landlord" && path !== "/join-farm" && path !== "/pending") {
+            window.location.replace("/join-farm");
+          }
+          setReady(true);
+          return;
+        }
+
+        const orgSnap = await getDoc(doc(db, "organizations", userData.organizationId));
+        const orgData = orgSnap.exists() ? orgSnap.data() : null;
+        if (orgData) setOrganization(orgData as any);
+
+        saveCache(firebaseUser, orgData, userData.role);
+        setUser(firebaseUser);
+        setRole(userData.role);
         setLoading(false);
         setReady(true);
-        if (!PUBLIC.includes(path)) window.location.replace("/login");
+
+        if (PUBLIC.includes(path)) window.location.replace("/overview");
+
+      } catch {
+        // Network error / offline — cache already loaded, just continue
+        setLoading(false);
+        setReady(true);
       }
     });
 
@@ -140,16 +147,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   if (!ready) {
     return (
-      <div
-        style={{
-          position: "fixed", inset: 0,
-          backgroundImage: "url(/splash.png)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", gap: 16,
-        }}
-      >
+      <div style={{
+        position: "fixed", inset: 0,
+        backgroundImage: "url(/splash.png)",
+        backgroundSize: "cover", backgroundPosition: "center",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", gap: 16,
+      }}>
         <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.35)" }} />
         <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
           <img src="/logo.png" alt="FaslBook"
