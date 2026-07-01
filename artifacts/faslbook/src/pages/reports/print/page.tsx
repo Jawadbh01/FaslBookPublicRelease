@@ -69,13 +69,18 @@ const REPORTS = [
 
 // ── Page ──────────────────────────────────────────────────────
 export default function PrintHubPage() {
-  const [, navigate]  = useLocation();
+  const [location, navigate] = useLocation();
   const { organization, user } = useAuthStore();
   const orgId    = organization?.id ?? null;
   const orgName  = (organization as any)?.name ?? "My Farm";
   const printedBy = (user as any)?.displayName ?? (user as any)?.email ?? "Manager";
 
-  const [activeReport, setActiveReport] = useState("ledger");
+  // Read ?type= from URL and pre-select that report
+  const urlType = new URLSearchParams(window.location.search).get("type") ?? "";
+  const validKeys = REPORTS.map(r => r.key);
+  const initialReport = validKeys.includes(urlType) ? urlType : "ledger";
+
+  const [activeReport, setActiveReport] = useState(initialReport);
   const [loading,      setLoading]      = useState(false);
   const [generating,   setGenerating]   = useState(false);
 
