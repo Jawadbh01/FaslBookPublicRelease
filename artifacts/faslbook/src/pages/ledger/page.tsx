@@ -572,7 +572,7 @@ export default function LedgerPage() {
             <p className="text-green-200 text-xs mt-0.5">Farm Ledger</p>
           </div>
           <button
-            onClick={() => window.location.href = "/reports/ledger"}
+            onClick={() => window.location.href = "/reports/print?type=ledger"}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
             style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white" }}
           >
