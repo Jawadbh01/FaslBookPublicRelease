@@ -44,6 +44,7 @@ import ReportsGodownPage from "@/pages/reports/godown/page";
 import ReportsParcelPage from "@/pages/reports/parcel/page";
 import ReportsLedgerPage from "@/pages/reports/ledger/page";
 import ReportsCropsPage from "@/pages/reports/crops/page";
+import PrintHubPage from "@/pages/reports/print/page";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -169,6 +170,9 @@ function AnimatedSwitch() {
         </Route>
         <Route path="/reports/crops">
           {() => <DashboardLayout><ReportsCropsPage /></DashboardLayout>}
+        </Route>
+        <Route path="/reports/print">
+          {() => <DashboardLayout><PrintHubPage /></DashboardLayout>}
         </Route>
 
         <Route>
