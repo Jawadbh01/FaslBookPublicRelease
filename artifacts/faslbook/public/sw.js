@@ -1,23 +1,25 @@
-// FaslBook Service Worker v4
-// Full offline support with proper caching strategy
+// FaslBook Service Worker v5 — Full offline-first
+// App shell cached on install → served offline → Firebase handles data layer
 
-const CACHE_NAME   = "faslbook-pages-v4";
-const STATIC_CACHE = "faslbook-static-v4";
+const CACHE_NAME   = "faslbook-shell-v5";
+const STATIC_CACHE = "faslbook-static-v5";
 
-const INSTALL_ASSETS = [
+// App shell files to pre-cache so the React app loads fully offline
+const SHELL_ASSETS = [
+  "/",
+  "/index.html",
   "/manifest.json",
+  "/logo.png",
   "/icon-192.png",
   "/icon-512.png",
-  "/logo.png",
-  "/banner.png",
 ];
 
-// ── Install ──────────────────────────────────────────────────
+// ── Install: cache the app shell ──────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) =>
+    caches.open(CACHE_NAME).then((cache) =>
       Promise.allSettled(
-        INSTALL_ASSETS.map((url) =>
+        SHELL_ASSETS.map((url) =>
           fetch(url).then((res) => {
             if (res.ok) return cache.put(url, res);
           }).catch(() => {})
@@ -28,7 +30,7 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// ── Activate ─────────────────────────────────────────────────
+// ── Activate: clean old caches ────────────────────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -57,11 +59,7 @@ function isFirebaseUrl(url) {
 }
 
 function isStaticAsset(url) {
-  return (
-    url.includes("/_next/static/") ||
-    url.includes("/_next/image") ||
-    /\.(png|jpg|jpeg|gif|webp|ico|svg|woff|woff2|ttf|eot|css)(\?|$)/.test(url)
-  );
+  return /\.(png|jpg|jpeg|gif|webp|ico|svg|woff|woff2|ttf|eot|css|js)(\?|$)/.test(url);
 }
 
 function safeCacheResponse(cacheName, request, response) {
@@ -72,46 +70,16 @@ function safeCacheResponse(cacheName, request, response) {
   }
 }
 
-const OFFLINE_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>FaslBook — Offline</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         display:flex;flex-direction:column;align-items:center;justify-content:center;
-         min-height:100vh;background:#1B5E20;color:#fff;text-align:center;gap:12px;padding:24px}
-    .logo{width:100px;height:100px;object-fit:cover;border-radius:22px;margin-bottom:8px;box-shadow:0 8px 32px rgba(0,0,0,0.3)}
-    h1{font-size:24px;font-weight:800;color:#fff}
-    .sub{font-size:13px;color:rgba(255,255,255,0.7);max-width:260px;line-height:1.5}
-    .badge{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);
-           border-radius:20px;padding:6px 16px;font-size:12px;color:rgba(255,255,255,0.8);margin-top:4px}
-    button{margin-top:16px;padding:14px 32px;background:#fff;color:#1B5E20;
-           border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer;
-           box-shadow:0 4px 16px rgba(0,0,0,0.2)}
-  </style>
-</head>
-<body>
-  <img src="/logo.png" class="logo" alt="FaslBook" onerror="this.style.display='none'"/>
-  <h1>FaslBook</h1>
-  <p class="sub">Manage Your Farm. Grow Your Profit.</p>
-  <div class="badge">📶 Offline Mode — Data saved locally</div>
-  <p class="sub" style="font-size:12px">Connect to internet to sync your data</p>
-  <button onclick="window.location.reload()">🔄 Try Again</button>
-</body>
-</html>`;
-
-// ── Fetch ─────────────────────────────────────────────────────
+// ── Fetch: network-first, always fall back to app shell ───────
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = request.url;
 
+  // Never intercept Firebase — it has its own offline queue
   if (request.method !== "GET") return;
   if (isFirebaseUrl(url)) return;
 
-  // Static assets: cache-first
+  // Static assets (JS/CSS/images): cache-first
   if (isStaticAsset(url)) {
     event.respondWith(
       caches.match(request).then((cached) => {
@@ -125,31 +93,41 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation: network-first, cache fallback
+  // Navigation (HTML pages): network-first, fall back to cached index.html
+  // This lets React + wouter handle all routing client-side even when offline
   if (request.mode === "navigate") {
     event.respondWith(
       fetch(request, { credentials: "same-origin" })
         .then((res) => {
+          // Cache the fresh response (this keeps index.html up to date)
           safeCacheResponse(CACHE_NAME, request, res);
           return res;
         })
         .catch(async () => {
-          const cached = await caches.match(request);
-          if (cached) return cached;
-          // Try overview (app shell)
-          const shell = await caches.match("/overview");
-          if (shell) return shell;
-          // Fallback offline page
-          return new Response(OFFLINE_HTML, {
-            status: 200,
-            headers: { "Content-Type": "text/html" },
-          });
+          // Offline fallback: serve cached index.html so the full React app loads
+          const cachedIndex = await caches.match("/index.html");
+          if (cachedIndex) return cachedIndex;
+
+          // Last resort: try cached root
+          const cachedRoot = await caches.match("/");
+          if (cachedRoot) return cachedRoot;
+
+          // If nothing cached at all (very first visit offline), show simple message
+          return new Response(
+            `<!DOCTYPE html><html><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>FaslBook</title></head>
+            <body style="font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#1B5E20;color:white;text-align:center;gap:12px;padding:24px">
+            <h2>Open FaslBook online first</h2>
+            <p style="opacity:.7;font-size:14px">Visit FaslBook while connected to the internet once, then it will work fully offline.</p>
+            <button onclick="location.reload()" style="margin-top:16px;padding:14px 28px;background:white;color:#1B5E20;border:none;border-radius:14px;font-size:15px;font-weight:700;cursor:pointer">Try Again</button>
+            </body></html>`,
+            { status: 200, headers: { "Content-Type": "text/html" } }
+          );
         })
     );
     return;
   }
 
-  // Other GETs: network-first
+  // Other GETs: network-first with cache fallback
   event.respondWith(
     fetch(request)
       .then((res) => {
@@ -158,6 +136,20 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(() => caches.match(request).then((c) => c || new Response("", { status: 404 })))
   );
+});
+
+// ── Message: force cache refresh ──────────────────────────────
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
+  if (event.data === "CACHE_SHELL") {
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.allSettled(SHELL_ASSETS.map((url) =>
+        fetch(url).then((res) => { if (res.ok) cache.put(url, res); }).catch(() => {})
+      ))
+    ).then(() => {
+      event.source?.postMessage("SHELL_CACHED");
+    });
+  }
 });
 
 // ── Push notifications ────────────────────────────────────────
