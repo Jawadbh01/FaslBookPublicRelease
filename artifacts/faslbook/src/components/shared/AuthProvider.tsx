@@ -43,47 +43,53 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const path = window.location.pathname;
     const { user: cachedUser, org: cachedOrg } = loadCache();
 
-    // ── Cached user → unblock immediately, no waiting for Firebase ──
+    // ── Step 1: Restore from cache immediately (no Firebase wait) ──────────
     if (cachedUser) {
       setUser(cachedUser as any);
       setRole(cachedUser.role);
       if (cachedOrg) setOrganization(cachedOrg);
       setLoading(false);
-      setReady(true);
 
-      if (PUBLIC.includes(path)) {
-        if (cachedUser.role === "farmer") {
-          window.location.replace("/login");
-        } else {
-          window.location.replace("/overview");
-        }
-        return;
+      if (PUBLIC.some((p) => path === p || path.startsWith(p + "/"))) {
+        // On a login/auth page but already signed in → go to app
+        setReady(true);
+        window.location.replace("/overview");
+        return; // Skip Firebase background check — redirect is enough
       }
-      // Already on a protected page — stay there (offline-safe)
-    } else {
-      // No cache at all — redirect to login unless already on public page
-      if (!PUBLIC.includes(path)) {
-        window.location.replace("/login");
-        return;
-      }
+      // On a protected page → show content immediately, check Firebase in background
       setReady(true);
+    } else if (PUBLIC.some((p) => path === p || path.startsWith(p + "/"))) {
+      // No cache, on a public page → let it render normally
+      setReady(true);
+    } else {
+      // No cache, on a protected page → redirect to login
+      window.location.replace("/login");
+      return;
     }
 
-    // ── Background Firebase check (non-blocking, updates cache silently) ──
+    // ── Step 2: Safety timeout — if Firebase doesn't respond in 5s (offline), unblock anyway ──
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+      setReady(true);
+    }, 5000);
+
+    // ── Step 3: Background Firebase verification (non-blocking) ───────────
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      clearTimeout(safetyTimer);
+
       if (!firebaseUser) {
-        // Firebase says no user — only clear if we have no cache (true logout)
-        const { user: cached } = loadCache();
-        if (!cached) {
+        // Firebase returned null — only act if we truly have no local cache
+        const { user: stillCached } = loadCache();
+        if (!stillCached) {
           clearAuthCache();
-          setUser(null);
-          setOrganization(null);
-          setRole(null);
-          setLoading(false);
-          setReady(true);
-          if (!PUBLIC.includes(path)) window.location.replace("/login");
+          setUser(null); setOrganization(null); setRole(null);
+          setLoading(false); setReady(true);
+          if (!PUBLIC.some((p) => path === p || path.startsWith(p + "/"))) {
+            window.location.replace("/login");
+          }
         }
-        // If we DO have a cache, we're offline — trust the cache and stay put
+        // Has cache but Firebase said null → we're offline, trust cache
+        setLoading(false);
         setReady(true);
         return;
       }
@@ -91,20 +97,21 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       try {
         const userSnap = await getDoc(doc(db, "users", firebaseUser.uid));
         if (!userSnap.exists()) {
-          if (!PUBLIC.includes(path)) window.location.replace("/role-select");
-          setReady(true);
+          clearAuthCache();
+          setUser(null); setOrganization(null); setRole(null);
+          setLoading(false); setReady(true);
+          window.location.replace("/role-select");
           return;
         }
 
         const userData = userSnap.data();
 
         if (!userData.role) {
-          if (!PUBLIC.includes(path)) window.location.replace("/role-select");
-          setReady(true);
-          return;
+          window.location.replace("/role-select");
+          setReady(true); return;
         }
 
-        // Farmers cannot log in
+        // Farmers cannot use the app
         if (userData.role === "farmer") {
           clearAuthCache();
           setUser(null); setOrganization(null); setRole(null);
@@ -114,13 +121,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         }
 
         if (!userData.organizationId) {
-          if (userData.role === "landlord" && path !== "/create-farm") {
+          if (userData.role === "landlord") {
             window.location.replace("/create-farm");
-          } else if (userData.role !== "landlord" && path !== "/join-farm" && path !== "/pending") {
+          } else {
             window.location.replace("/join-farm");
           }
-          setReady(true);
-          return;
+          setReady(true); return;
         }
 
         const orgSnap = await getDoc(doc(db, "organizations", userData.organizationId));
@@ -133,36 +139,43 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         setLoading(false);
         setReady(true);
 
-        if (PUBLIC.includes(path)) window.location.replace("/overview");
+        if (PUBLIC.some((p) => path === p || path.startsWith(p + "/"))) {
+          window.location.replace("/overview");
+        }
 
       } catch {
-        // Network error / offline — cache already loaded, just continue
+        // Network error / Firestore offline — cache already applied, just continue
         setLoading(false);
         setReady(true);
       }
     });
 
-    return () => unsub();
+    return () => {
+      clearTimeout(safetyTimer);
+      unsub();
+    };
   }, []);
 
   if (!ready) {
     return (
       <div style={{
-        position: "fixed", inset: 0,
-        backgroundImage: "url(/splash.png)",
-        backgroundSize: "cover", backgroundPosition: "center",
+        position: "fixed", inset: 0, backgroundColor: "#1B5E20",
         display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center", gap: 16,
       }}>
-        <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.35)" }} />
-        <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-          <img src="/logo.png" alt="FaslBook"
-            style={{ width: 72, height: 72, objectFit: "contain", borderRadius: 14 }}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-          <div style={{ width: 36, height: 36, borderRadius: "50%", border: "4px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.8s linear infinite" }} />
-          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>Loading FaslBook…</p>
-        </div>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <img
+          src="/logo.png"
+          alt="FaslBook"
+          style={{ width: 80, height: 80, objectFit: "contain", borderRadius: 16 }}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        />
+        <div style={{
+          width: 36, height: 36, borderRadius: "50%",
+          border: "4px solid rgba(255,255,255,0.25)",
+          borderTopColor: "white",
+          animation: "spin 0.8s linear infinite",
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     );
   }
