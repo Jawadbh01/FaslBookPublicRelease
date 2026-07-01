@@ -12,6 +12,7 @@ import RoleSelectPage from "@/pages/role-select/page";
 import CreateFarmPage from "@/pages/create-farm/page";
 import JoinFarmPage from "@/pages/join-farm/page";
 import PendingPage from "@/pages/pending/page";
+import OfflinePage from "@/pages/offline/page";
 
 // Dashboard pages
 import OverviewPage from "@/pages/overview/page";
@@ -77,6 +78,9 @@ function AnimatedSwitch() {
         <Route path="/create-farm" component={CreateFarmPage} />
         <Route path="/join-farm"   component={JoinFarmPage} />
         <Route path="/pending"     component={PendingPage} />
+        <Route path="/offline">
+          {() => <OfflinePage />}
+        </Route>
 
         {/* Dashboard routes */}
         <Route path="/overview">

@@ -1,9 +1,8 @@
 
-import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
-import { Wheat, Users, Tractor, ArrowLeft, Loader2 } from "lucide-react";
+import { Wheat, Users, ArrowLeft, Loader2 } from "lucide-react";
 
 const roles = [
   {
@@ -24,52 +23,28 @@ const roles = [
     color: "#1565C0",
     bg: "#E3F2FD",
   },
-  {
-    id: "farmer",
-    title: "Farmer",
-    urdu: "کسان",
-    description: "I work the land and grow crops",
-    icon: Tractor,
-    color: "#E65100",
-    bg: "#FFF3E0",
-  },
 ];
 
 export default function RoleSelectPage() {
-  
   const [isGoogleUser, setIsGoogleUser] = useState(false);
   const [selecting, setSelecting] = useState<string | null>(null);
 
   useEffect(() => {
-    const user = auth.currentUser;
-    if (user) {
-      setIsGoogleUser(true);
-    }
+    if (auth.currentUser) setIsGoogleUser(true);
   }, []);
 
   const handleSelect = async (roleId: string) => {
     const user = auth.currentUser;
-
     if (user && isGoogleUser) {
       try {
         setSelecting(roleId);
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
-
         if (userSnap.exists()) {
-          await updateDoc(userRef, {
-            role: roleId,
-            updatedAt: serverTimestamp(),
-          });
+          await updateDoc(userRef, { role: roleId, updatedAt: serverTimestamp() });
         }
-
-        if (roleId === "landlord") {
-          window.location.replace("/create-farm");
-        } else {
-          window.location.replace("/join-farm");
-        }
-      } catch (err) {
-        console.error("Role update error:", err);
+        window.location.replace(roleId === "landlord" ? "/create-farm" : "/join-farm");
+      } catch {
         setSelecting(null);
       }
     } else {
@@ -79,15 +54,8 @@ export default function RoleSelectPage() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      {/* Header */}
-      <div
-        className="px-4 pt-12 pb-8"
-        style={{ backgroundColor: "#1B5E20" }}
-      >
-        <button
-          onClick={() => window.history.back()}
-          className="text-white mb-4 block"
-        >
+      <div className="px-4 pt-12 pb-8" style={{ backgroundColor: "#1B5E20" }}>
+        <button onClick={() => window.history.back()} className="text-white mb-4 block">
           <ArrowLeft size={24} />
         </button>
         <div className="flex items-center gap-3">
@@ -99,22 +67,17 @@ export default function RoleSelectPage() {
               {isGoogleUser ? "Almost Done!" : "Who are you?"}
             </h1>
             <p className="text-green-200 text-xs">
-              {isGoogleUser
-                ? "Just select your role to continue"
-                : "آپ کون ہیں؟ — Select your role"
-              }
+              {isGoogleUser ? "Select your role to continue" : "آپ کون ہیں؟ — Select your role"}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Role Cards */}
       <div className="flex-1 px-6 pt-8 pb-10">
         <p className="text-gray-500 text-sm text-center mb-8">
           {isGoogleUser
-            ? "Your account is ready. Choose your role on this farm."
-            : "Choose your role to get started with FaslBook"
-          }
+            ? "Choose your role on this farm."
+            : "Choose your role to get started with FaslBook"}
         </p>
 
         <div className="flex flex-col gap-4">
@@ -129,35 +92,19 @@ export default function RoleSelectPage() {
                 className="flex items-center gap-4 w-full rounded-2xl p-5 border-2 border-gray-100 active:scale-95 transition-transform text-left disabled:opacity-60"
                 style={{ backgroundColor: "#FAFAFA" }}
               >
-                <div
-                  className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: role.bg }}
-                >
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0" style={{ backgroundColor: role.bg }}>
                   {isLoading
                     ? <Loader2 size={28} color={role.color} className="animate-spin" />
-                    : <Icon size={28} color={role.color} />
-                  }
+                    : <Icon size={28} color={role.color} />}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-gray-800 text-lg">
-                      {role.title}
-                    </span>
-                    <span
-                      className="text-sm font-medium"
-                      style={{ color: role.color }}
-                    >
-                      {role.urdu}
-                    </span>
+                    <span className="font-bold text-gray-800 text-lg">{role.title}</span>
+                    <span className="text-sm font-medium" style={{ color: role.color }}>{role.urdu}</span>
                   </div>
-                  <p className="text-gray-500 text-sm">
-                    {role.description}
-                  </p>
+                  <p className="text-gray-500 text-sm">{role.description}</p>
                 </div>
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: role.bg }}
-                >
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: role.bg }}>
                   <span style={{ color: role.color }} className="font-bold">→</span>
                 </div>
               </button>
@@ -165,17 +112,12 @@ export default function RoleSelectPage() {
           })}
         </div>
 
-        {!isGoogleUser && (
-          <div
-            className="mt-8 px-4 py-4 rounded-2xl"
-            style={{ backgroundColor: "#F5F5F5" }}
-          >
-            <p className="text-gray-500 text-xs text-center">
-              👷 <strong>Workers</strong> are invited by landlord or manager.
-              Workers cannot self-register.
-            </p>
-          </div>
-        )}
+        <div className="mt-8 px-4 py-4 rounded-2xl" style={{ backgroundColor: "#FFF8E1" }}>
+          <p className="text-amber-700 text-xs text-center">
+            🌾 <strong>Farmers</strong> are added and managed by the Landlord or Manager.
+            Farmers do not need to create an account.
+          </p>
+        </div>
       </div>
     </div>
   );

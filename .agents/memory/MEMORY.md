@@ -1,0 +1,1 @@
+- [FaslBook architecture](faslbook-arch.md) — React+Vite+Firebase PWA, pnpm monorepo, port 25207, no Farmer login (landlord/manager only)

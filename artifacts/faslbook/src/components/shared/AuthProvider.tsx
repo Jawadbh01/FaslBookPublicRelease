@@ -40,15 +40,20 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     const path = window.location.pathname;
     const { user: cachedUser, org: cachedOrg } = loadCache();
 
-    // Immediately show content from cache — no spinner needed
     if (cachedUser) {
       setUser(cachedUser as any);
       setRole(cachedUser.role);
       if (cachedOrg) setOrganization(cachedOrg);
       setLoading(false);
       setReady(true);
+
       if (PUBLIC.includes(path)) {
-        window.location.replace("/overview");
+        // farmers don't have an app — redirect to login
+        if (cachedUser.role === "farmer") {
+          window.location.replace("/login");
+        } else {
+          window.location.replace("/overview");
+        }
         return;
       }
     } else {
@@ -59,7 +64,6 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       setReady(true);
     }
 
-    // Background Firebase check — updates cache silently
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
@@ -75,12 +79,26 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
             if (!PUBLIC.includes(path)) window.location.replace("/role-select");
             return;
           }
+
+          // Farmers cannot log in — send them back to login with a message
+          if (userData.role === "farmer") {
+            clearAuthCache();
+            setUser(null);
+            setOrganization(null);
+            setRole(null);
+            setLoading(false);
+            setReady(true);
+            window.location.replace("/login?farmer=1");
+            return;
+          }
+
           if (!userData.organizationId) {
             if (userData.role === "landlord" && path !== "/create-farm") {
               window.location.replace("/create-farm");
             } else if (userData.role !== "landlord" && path !== "/join-farm" && path !== "/pending") {
               window.location.replace("/join-farm");
             }
+            setReady(true);
             return;
           }
 
@@ -96,20 +114,17 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           if (PUBLIC.includes(path)) window.location.replace("/overview");
 
         } catch {
-          // Offline — already loaded from cache, continue normally
           setLoading(false);
           setReady(true);
         }
 
       } else {
-        // Firebase says no user — trust cache if present (offline scenario)
         const { user: cached } = loadCache();
         if (cached) {
           setLoading(false);
           setReady(true);
           return;
         }
-        // Truly logged out
         clearAuthCache();
         setUser(null);
         setOrganization(null);
@@ -127,27 +142,19 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return (
       <div
         style={{
-          position: "fixed",
-          inset: 0,
+          position: "fixed", inset: 0,
           backgroundImage: "url(/splash.png)",
           backgroundSize: "cover",
           backgroundPosition: "center",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 16,
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", gap: 16,
         }}
       >
-        {/* Dark scrim so spinner is visible against any splash image */}
         <div style={{ position: "absolute", inset: 0, backgroundColor: "rgba(0,0,0,0.35)" }} />
         <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-          <img
-            src="/logo.png"
-            alt="FaslBook"
+          <img src="/logo.png" alt="FaslBook"
             style={{ width: 72, height: 72, objectFit: "contain", borderRadius: 14 }}
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-          />
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
           <div style={{ width: 36, height: 36, borderRadius: "50%", border: "4px solid rgba(255,255,255,0.3)", borderTopColor: "white", animation: "spin 0.8s linear infinite" }} />
           <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, fontWeight: 600 }}>Loading FaslBook…</p>
         </div>
