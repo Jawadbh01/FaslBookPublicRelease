@@ -236,7 +236,7 @@ export default function ParcelsPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.location.href = "/reports/parcel"}
+              onClick={() => window.location.href = "/reports/print?type=parcel"}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
               style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white" }}
             >
