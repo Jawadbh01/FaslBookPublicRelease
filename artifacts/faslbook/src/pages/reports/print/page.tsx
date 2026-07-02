@@ -136,6 +136,7 @@ export default function PrintHubPage() {
     try {
       switch (activeReport) {
 
+        // ── Farmer Ledger ─────────────────────────────────────────
         case "ledger": {
           const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId)));
           const rows = snap.docs.map(d => {
@@ -151,9 +152,8 @@ export default function PrintHubPage() {
             };
           })
           .filter(e => {
-            if (selectedFarmer && e.farmerId && e.farmerId !== selectedFarmer) return false;
-            if (dateFrom && e.date < dateFrom) return false;
-            if (dateTo   && e.date > dateTo)   return false;
+            if (dateFrom && e.date && e.date < dateFrom) return false;
+            if (dateTo   && e.date && e.date > dateTo)   return false;
             return true;
           })
           .sort((a,b) => a.date.localeCompare(b.date));
@@ -161,20 +161,22 @@ export default function PrintHubPage() {
           break;
         }
 
+        // ── Parcel Report — crops + ledgerEntries for that parcel ─
         case "parcel": {
           if (selectedParcel) {
-            const [cSnap, eSnap, iSnap] = await Promise.all([
-              getDocs(query(collection(db,"crops"),    where("organizationId","==",orgId), where("parcelId","==",selectedParcel))),
-              getDocs(query(collection(db,"expenses"), where("organizationId","==",orgId), where("parcelId","==",selectedParcel))),
-              getDocs(query(collection(db,"income"),   where("organizationId","==",orgId), where("parcelId","==",selectedParcel))),
+            const [cSnap, lSnap] = await Promise.all([
+              getDocs(query(collection(db,"crops"),         where("organizationId","==",orgId), where("parcelId","==",selectedParcel))),
+              getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId), where("parcelId","==",selectedParcel))),
             ]);
+            const allLedger = lSnap.docs.map(d => ({id:d.id,...d.data()}));
             setParcelCrops(cSnap.docs.map(d => ({id:d.id,...d.data()})));
-            setParcelExpenses(eSnap.docs.map(d => ({id:d.id,...d.data()})));
-            setParcelIncome(iSnap.docs.map(d => ({id:d.id,...d.data()})));
+            setParcelExpenses(allLedger.filter((e:any) => e.type === "debit"));
+            setParcelIncome(allLedger.filter((e:any)  => e.type === "credit"));
           }
           break;
         }
 
+        // ── Godown / Inventory ────────────────────────────────────
         case "godown": {
           const [iSnap, tSnap] = await Promise.all([
             getDocs(query(collection(db,"inventoryItems"),        where("organizationId","==",orgId))),
@@ -185,73 +187,82 @@ export default function PrintHubPage() {
           break;
         }
 
+        // ── Expense Report — ledgerEntries type=="debit" ──────────
         case "expense": {
-          const snap = await getDocs(query(collection(db,"expenses"), where("organizationId","==",orgId)));
+          const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId), where("type","==","debit")));
           const rows = snap.docs.map(d => {
             const r = d.data();
             const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
             const cat  = r.category||"other";
             return { id:d.id, date, category:cat,
               categoryLabel: r.categoryLabel || EXPENSE_LABELS[cat]||cat,
-              description: r.notes||r.description||"", amount:Number(r.amount)||0 };
-          }).filter(e => (!dateFrom||e.date>=dateFrom) && (!dateTo||e.date<=dateTo));
+              description: r.notes||r.dealerName||r.parcelName||"", amount:Number(r.amount)||0 };
+          }).filter(e => (!dateFrom||!e.date||e.date>=dateFrom) && (!dateTo||!e.date||e.date<=dateTo))
+            .sort((a,b)=>a.date.localeCompare(b.date));
           setAllExpenses(rows);
           break;
         }
 
+        // ── Sales / Income Report — ledgerEntries type=="credit" ──
         case "sales": {
-          const snap = await getDocs(query(collection(db,"income"), where("organizationId","==",orgId)));
+          const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId), where("type","==","credit")));
           const rows = snap.docs.map(d => {
             const r = d.data();
             const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
-            return { id:d.id, date, buyer:r.buyer||r.dealerName||"",
-              cropName:r.cropName||"", parcelName:r.parcelName||"",
-              weightKg:Number(r.weightKg)||0, ratePerKg:Number(r.ratePerKg)||0,
-              amount:Number(r.amount)||0, paymentStatus:r.paymentStatus||r.status||"paid",
-              notes:r.notes||"" };
-          }).filter(e => (!dateFrom||e.date>=dateFrom) && (!dateTo||e.date<=dateTo));
+            return { id:d.id, date,
+              buyer:      r.dealerName || r.buyer || "",
+              cropName:   r.categoryLabel || r.cropName || r.category || "",
+              parcelName: r.parcelName || "",
+              weightKg:   Number(r.weightKg)||0,
+              ratePerKg:  Number(r.ratePerKg)||0,
+              amount:     Number(r.amount)||0,
+              paymentStatus: r.paymentStatus || "paid",
+              notes:      r.notes||"" };
+          }).filter(e => (!dateFrom||!e.date||e.date>=dateFrom) && (!dateTo||!e.date||e.date<=dateTo))
+            .sort((a,b)=>a.date.localeCompare(b.date));
           setAllSales(rows);
           break;
         }
 
+        // ── Farm Summary ──────────────────────────────────────────
         case "summary": {
-          const [wSnap,pSnap,cSnap,eSnap,iSnap,invSnap,lSnap] = await Promise.all([
-            getDocs(query(collection(db,"workers"),       where("organizationId","==",orgId), where("workerType","==","farmer"))),
-            getDocs(query(collection(db,"parcels"),       where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"crops"),         where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"expenses"),      where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"income"),        where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"inventoryItems"),where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId))),
+          const [wSnap,pSnap,cSnap,ledgerSnap,invSnap] = await Promise.all([
+            getDocs(query(collection(db,"workers"),        where("organizationId","==",orgId), where("workerType","==","farmer"))),
+            getDocs(query(collection(db,"parcels"),        where("organizationId","==",orgId))),
+            getDocs(query(collection(db,"crops"),          where("organizationId","==",orgId))),
+            getDocs(query(collection(db,"ledgerEntries"),  where("organizationId","==",orgId))),
+            getDocs(query(collection(db,"inventoryItems"), where("organizationId","==",orgId))),
           ]);
           const parcelsD = pSnap.docs.map(d=>d.data());
           const cropsD   = cSnap.docs.map(d=>d.data());
-          const expD     = eSnap.docs.map(d=>d.data());
-          const incD     = iSnap.docs.map(d=>d.data());
+          const ledgerD  = ledgerSnap.docs.map(d=>({...d.data(), id:d.id}));
+          const expD     = ledgerD.filter((e:any) => e.type === "debit");
+          const incD     = ledgerD.filter((e:any) => e.type === "credit");
           const invD     = invSnap.docs.map(d=>d.data());
 
-          const totalInc = incD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);
-          const totalExp = expD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);
-          const invVal   = invD.reduce((s:number,d:any)=>s+((d.currentStock||0)*(d.pricePerUnit||0)),0);
+          const totalInc   = incD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);
+          const totalExp   = expD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);
+          const invVal     = invD.reduce((s:number,d:any)=>s+((d.currentStock||0)*(d.pricePerUnit||0)),0);
           const totalAcres = parcelsD.reduce((s:number,p:any)=>s+(Number(p.acres)||0),0);
 
-          const expByCat: Record<string,number>  = {};
+          const expByCat: Record<string,number> = {};
           expD.forEach((e:any) => { const c=e.category||"other"; expByCat[c]=(expByCat[c]||0)+(Number(e.amount)||0); });
 
           const incByType: Record<string,number> = {};
-          incD.forEach((e:any) => { const t=e.type||e.incomeType||"other"; incByType[t]=(incByType[t]||0)+(Number(e.amount)||0); });
+          incD.forEach((e:any) => { const c=e.category||"other"; incByType[c]=(incByType[c]||0)+(Number(e.amount)||0); });
 
-          let outstanding=0;
-          lSnap.docs.forEach(d=>{ const {type,amount}=d.data(); outstanding += type==="credit"?Number(amount)||0:-(Number(amount)||0); });
+          const outstanding = totalInc - totalExp;
 
+          const toDateStr = (v:any) => v ? (typeof v==="string" ? v : v.toDate?.()?.toISOString().split("T")[0]||"") : "";
           const activities = [
-            ...expD.map((e:any) => ({ date:e.date||"", description:`Expense: ${e.categoryLabel||e.category||"Other"} — Rs.${(Number(e.amount)||0).toLocaleString("en-PK")}` })),
-            ...incD.map((e:any) => { const dt=e.date?(typeof e.date==="string"?e.date:e.date.toDate?.()?.toISOString().split("T")[0]||""):""; return {date:dt,description:`Income: ${e.type||"Other"} — Rs.${(Number(e.amount)||0).toLocaleString("en-PK")}`}; }),
+            ...expD.map((e:any) => ({ date:toDateStr(e.date), description:`Expense: ${e.categoryLabel||e.category||"Other"} — Rs.${(Number(e.amount)||0).toLocaleString("en-PK")}` })),
+            ...incD.map((e:any) => ({ date:toDateStr(e.date), description:`Income: ${e.categoryLabel||e.category||"Other"} — Rs.${(Number(e.amount)||0).toLocaleString("en-PK")}` })),
           ].filter(a=>a.date).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(a=>({...a, date:fmtDateDisplay(a.date)}));
 
           setSummaryData({
             farmerCount:wSnap.docs.length, parcelCount:pSnap.docs.length,
-            totalAcres, activeCrops:cropsD.filter((c:any)=>c.status!=="harvested"&&c.status!=="closed").length,
+            totalAcres,
+            activeCrops:   cropsD.filter((c:any)=>c.status!=="harvested"&&c.status!=="closed").length,
             harvestedCrops:cropsD.filter((c:any)=>c.status==="harvested").length,
             totalIncome:totalInc, totalExpense:totalExp, invValue:invVal, outstanding,
             expByCat, incByType, activities,
@@ -259,7 +270,7 @@ export default function PrintHubPage() {
           break;
         }
       }
-    } catch(e){ console.error(e); }
+    } catch(err) { console.error("PrintHub loadData error:", err); }
     setGenerating(false);
   }
 
