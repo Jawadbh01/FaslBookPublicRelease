@@ -67,9 +67,15 @@ const REPORTS = [
   { key:"summary", label:"Farm Summary",         icon:"🏡", desc:"One-page executive overview" },
 ];
 
+// ── Single-field query helper (avoids composite index requirement) ───
+async function getOrgDocs(collectionName: string, orgId: string) {
+  const snap = await getDocs(query(collection(db, collectionName), where("organizationId","==",orgId)));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+}
+
 // ── Page ──────────────────────────────────────────────────────
 export default function PrintHubPage() {
-  const [location, navigate] = useLocation();
+  const [, navigate] = useLocation();
   const { organization, user } = useAuthStore();
   const orgId    = organization?.id ?? null;
   const orgName  = (organization as any)?.name ?? "My Farm";
@@ -108,21 +114,28 @@ export default function PrintHubPage() {
   const [allSales,       setAllSales]       = useState<any[]>([]);
   const [summaryData,    setSummaryData]    = useState<any>(null);
 
-  // Load farmers & parcels once
+  // ── Load farmers & parcels once ───────────────────────────────
+  // NOTE: uses single-field query only (no workerType compound) to avoid
+  // missing composite index errors that break the entire Firestore client.
   useEffect(() => {
     if (!orgId) return;
     (async () => {
       setLoading(true);
-      const [wSnap, pSnap] = await Promise.all([
-        getDocs(query(collection(db,"workers"), where("organizationId","==",orgId), where("workerType","==","farmer"))),
-        getDocs(query(collection(db,"parcels"), where("organizationId","==",orgId))),
-      ]);
-      const fl = wSnap.docs.map(d => ({ id:d.id, name:d.data().name||"Unnamed", ...d.data() }));
-      const pl = pSnap.docs.map(d => ({ id:d.id, name:d.data().name||"Unnamed", ...d.data() }));
-      setFarmers(fl);
-      setParcels(pl);
-      if (fl.length) setSelectedFarmer(fl[0].id);
-      if (pl.length) setSelectedParcel(pl[0].id);
+      try {
+        const [workers, pls] = await Promise.all([
+          getOrgDocs("workers", orgId),
+          getOrgDocs("parcels", orgId),
+        ]);
+        // Filter farmers client-side — no composite index needed
+        const fl = workers.filter(w => w.workerType === "farmer");
+        const pl = pls.map(d => ({ id: d.id, name: d.name || "Unnamed" }));
+        setFarmers(fl);
+        setParcels(pl);
+        if (fl.length) setSelectedFarmer(fl[0].id);
+        if (pl.length) setSelectedParcel(pl[0].id);
+      } catch (err) {
+        console.error("PrintHub: failed to load farmers/parcels", err);
+      }
       setLoading(false);
     })();
   }, [orgId]);
@@ -138,25 +151,26 @@ export default function PrintHubPage() {
 
         // ── Farmer Ledger ─────────────────────────────────────────
         case "ledger": {
-          const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId)));
-          const rows = snap.docs.map(d => {
-            const r = d.data();
-            const type = r.type === "credit" ? "credit" : "debit" as "credit"|"debit";
-            const cat  = r.category || "other";
-            return {
-              id: d.id, type, date: r.date||"",
-              categoryLabel: r.categoryLabel || (type==="credit" ? INCOME_LABELS[cat]??cat : EXPENSE_LABELS[cat]??cat),
-              description: r.notes || r.dealerName || r.parcelName || "",
-              amount: Number(r.amount)||0,
-              farmerId: r.farmerId || r.workerFarmerId || "",
-            };
-          })
-          .filter(e => {
-            if (dateFrom && e.date && e.date < dateFrom) return false;
-            if (dateTo   && e.date && e.date > dateTo)   return false;
-            return true;
-          })
-          .sort((a,b) => a.date.localeCompare(b.date));
+          // Single-field query, filter client-side
+          const all = await getOrgDocs("ledgerEntries", orgId);
+          const rows = all
+            .map(r => {
+              const type = r.type === "credit" ? "credit" : "debit" as "credit"|"debit";
+              const cat  = r.category || "other";
+              return {
+                id: r.id, type, date: r.date||"",
+                categoryLabel: r.categoryLabel || (type==="credit" ? INCOME_LABELS[cat]??cat : EXPENSE_LABELS[cat]??cat),
+                description: r.notes || r.dealerName || r.parcelName || "",
+                amount: Number(r.amount)||0,
+                farmerId: r.farmerId || r.workerFarmerId || "",
+              };
+            })
+            .filter(e => {
+              if (dateFrom && e.date && e.date < dateFrom) return false;
+              if (dateTo   && e.date && e.date > dateTo)   return false;
+              return true;
+            })
+            .sort((a,b) => a.date.localeCompare(b.date));
           setLedgerEntries(rows);
           break;
         }
@@ -164,81 +178,87 @@ export default function PrintHubPage() {
         // ── Parcel Report — crops + ledgerEntries for that parcel ─
         case "parcel": {
           if (selectedParcel) {
-            const [cSnap, lSnap] = await Promise.all([
-              getDocs(query(collection(db,"crops"),         where("organizationId","==",orgId), where("parcelId","==",selectedParcel))),
-              getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId), where("parcelId","==",selectedParcel))),
+            // Single-field queries only, filter parcelId client-side
+            const [allCrops, allLedger] = await Promise.all([
+              getOrgDocs("crops", orgId),
+              getOrgDocs("ledgerEntries", orgId),
             ]);
-            const allLedger = lSnap.docs.map(d => ({id:d.id,...d.data()}));
-            setParcelCrops(cSnap.docs.map(d => ({id:d.id,...d.data()})));
-            setParcelExpenses(allLedger.filter((e:any) => e.type === "debit"));
-            setParcelIncome(allLedger.filter((e:any)  => e.type === "credit"));
+            const cropsForParcel  = allCrops.filter((c:any) => c.parcelId === selectedParcel);
+            const ledgerForParcel = allLedger.filter((e:any) => e.parcelId === selectedParcel);
+            setParcelCrops(cropsForParcel);
+            setParcelExpenses(ledgerForParcel.filter((e:any) => e.type === "debit"));
+            setParcelIncome(ledgerForParcel.filter((e:any)  => e.type === "credit"));
           }
           break;
         }
 
         // ── Godown / Inventory ────────────────────────────────────
         case "godown": {
-          const [iSnap, tSnap] = await Promise.all([
-            getDocs(query(collection(db,"inventoryItems"),        where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"inventoryTransactions"), where("organizationId","==",orgId))),
+          const [items, txns] = await Promise.all([
+            getOrgDocs("inventoryItems", orgId),
+            getOrgDocs("inventoryTransactions", orgId),
           ]);
-          setGodownItems(iSnap.docs.map(d=>({id:d.id,...d.data()})));
-          setGodownTxns(tSnap.docs.map(d=>({id:d.id,...d.data()})));
+          setGodownItems(items);
+          setGodownTxns(txns);
           break;
         }
 
         // ── Expense Report — ledgerEntries type=="debit" ──────────
+        // Single-field query only, filter type client-side
         case "expense": {
-          const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId), where("type","==","debit")));
-          const rows = snap.docs.map(d => {
-            const r = d.data();
-            const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
-            const cat  = r.category||"other";
-            return { id:d.id, date, category:cat,
-              categoryLabel: r.categoryLabel || EXPENSE_LABELS[cat]||cat,
-              description: r.notes||r.dealerName||r.parcelName||"", amount:Number(r.amount)||0 };
-          }).filter(e => (!dateFrom||!e.date||e.date>=dateFrom) && (!dateTo||!e.date||e.date<=dateTo))
+          const all = await getOrgDocs("ledgerEntries", orgId);
+          const rows = all
+            .filter(r => r.type === "debit")
+            .map(r => {
+              const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
+              const cat  = r.category||"other";
+              return { id:r.id, date, category:cat,
+                categoryLabel: r.categoryLabel || EXPENSE_LABELS[cat]||cat,
+                description: r.notes||r.dealerName||r.parcelName||"", amount:Number(r.amount)||0 };
+            })
+            .filter(e => (!dateFrom||!e.date||e.date>=dateFrom) && (!dateTo||!e.date||e.date<=dateTo))
             .sort((a,b)=>a.date.localeCompare(b.date));
           setAllExpenses(rows);
           break;
         }
 
         // ── Sales / Income Report — ledgerEntries type=="credit" ──
+        // Single-field query only, filter type client-side
         case "sales": {
-          const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId), where("type","==","credit")));
-          const rows = snap.docs.map(d => {
-            const r = d.data();
-            const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
-            return { id:d.id, date,
-              buyer:      r.dealerName || r.buyer || "",
-              cropName:   r.categoryLabel || r.cropName || r.category || "",
-              parcelName: r.parcelName || "",
-              weightKg:   Number(r.weightKg)||0,
-              ratePerKg:  Number(r.ratePerKg)||0,
-              amount:     Number(r.amount)||0,
-              paymentStatus: r.paymentStatus || "paid",
-              notes:      r.notes||"" };
-          }).filter(e => (!dateFrom||!e.date||e.date>=dateFrom) && (!dateTo||!e.date||e.date<=dateTo))
+          const all = await getOrgDocs("ledgerEntries", orgId);
+          const rows = all
+            .filter(r => r.type === "credit")
+            .map(r => {
+              const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
+              return { id:r.id, date,
+                buyer:      r.dealerName || r.buyer || "",
+                cropName:   r.categoryLabel || r.cropName || r.category || "",
+                parcelName: r.parcelName || "",
+                weightKg:   Number(r.weightKg)||0,
+                ratePerKg:  Number(r.ratePerKg)||0,
+                amount:     Number(r.amount)||0,
+                paymentStatus: r.paymentStatus || "paid",
+                notes:      r.notes||"" };
+            })
+            .filter(e => (!dateFrom||!e.date||e.date>=dateFrom) && (!dateTo||!e.date||e.date<=dateTo))
             .sort((a,b)=>a.date.localeCompare(b.date));
           setAllSales(rows);
           break;
         }
 
         // ── Farm Summary ──────────────────────────────────────────
+        // Single-field queries only, filter workerType/type client-side
         case "summary": {
-          const [wSnap,pSnap,cSnap,ledgerSnap,invSnap] = await Promise.all([
-            getDocs(query(collection(db,"workers"),        where("organizationId","==",orgId), where("workerType","==","farmer"))),
-            getDocs(query(collection(db,"parcels"),        where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"crops"),          where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"ledgerEntries"),  where("organizationId","==",orgId))),
-            getDocs(query(collection(db,"inventoryItems"), where("organizationId","==",orgId))),
+          const [allWorkers,parcelsD,cropsD,ledgerD,invD] = await Promise.all([
+            getOrgDocs("workers", orgId),
+            getOrgDocs("parcels", orgId),
+            getOrgDocs("crops", orgId),
+            getOrgDocs("ledgerEntries", orgId),
+            getOrgDocs("inventoryItems", orgId),
           ]);
-          const parcelsD = pSnap.docs.map(d=>d.data());
-          const cropsD   = cSnap.docs.map(d=>d.data());
-          const ledgerD  = ledgerSnap.docs.map(d=>({...d.data(), id:d.id}));
-          const expD     = ledgerD.filter((e:any) => e.type === "debit");
-          const incD     = ledgerD.filter((e:any) => e.type === "credit");
-          const invD     = invSnap.docs.map(d=>d.data());
+          const farmerCount = allWorkers.filter((w:any) => w.workerType === "farmer").length;
+          const expD  = ledgerD.filter((e:any) => e.type === "debit");
+          const incD  = ledgerD.filter((e:any) => e.type === "credit");
 
           const totalInc   = incD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);
           const totalExp   = expD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);
@@ -260,7 +280,7 @@ export default function PrintHubPage() {
           ].filter(a=>a.date).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,12).map(a=>({...a, date:fmtDateDisplay(a.date)}));
 
           setSummaryData({
-            farmerCount:wSnap.docs.length, parcelCount:pSnap.docs.length,
+            farmerCount, parcelCount:parcelsD.length,
             totalAcres,
             activeCrops:   cropsD.filter((c:any)=>c.status!=="harvested"&&c.status!=="closed").length,
             harvestedCrops:cropsD.filter((c:any)=>c.status==="harvested").length,
@@ -413,10 +433,19 @@ export default function PrintHubPage() {
             {activeReport==="ledger" && (
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-semibold text-gray-400 uppercase">Farmer</label>
-                <Select value={selectedFarmer} onChange={setSelectedFarmer} disabled={loading||!farmers.length}>
-                  {!farmers.length && <option value="">No farmers found</option>}
-                  {farmers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </Select>
+                {loading ? (
+                  <div className="flex items-center gap-2 py-2 px-3 text-sm text-gray-400">
+                    <Loader2 size={14} className="animate-spin" /> Loading…
+                  </div>
+                ) : farmers.length === 0 ? (
+                  <p className="text-xs text-orange-600 px-1 py-2">
+                    No farmers added yet. Add farmers in the Team section first.
+                  </p>
+                ) : (
+                  <Select value={selectedFarmer} onChange={setSelectedFarmer}>
+                    {farmers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </Select>
+                )}
               </div>
             )}
 
@@ -445,21 +474,22 @@ export default function PrintHubPage() {
               className="w-full py-3.5 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50"
               style={{ backgroundColor:"#1B5E20" }}>
               {generating
-                ? <><Loader2 size={15} className="animate-spin" /> Preparing…</>
-                : <><Printer size={15} /> Print {REPORTS.find(r=>r.key===activeReport)?.label}</>
+                ? <><Loader2 size={16} className="animate-spin" /> Preparing…</>
+                : <><Printer size={16} /> Print {REPORTS.find(r=>r.key===activeReport)?.label}</>
               }
             </button>
           </div>
 
           {/* Screen preview */}
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">Preview</p>
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ minHeight:300 }}>
+          <div className="bg-white rounded-2xl shadow-sm p-4">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-3">Preview</p>
             {renderTemplate(false)}
           </div>
+
         </div>
       </div>
 
-      {/* ═══ PRINT-ONLY OUTPUT (hidden on screen via @media screen, shown on print) ═══ */}
+      {/* ═══ PRINT-ONLY (shown only when window.print() fires) ═══ */}
       <div className="for-print">
         {renderTemplate(true)}
       </div>
