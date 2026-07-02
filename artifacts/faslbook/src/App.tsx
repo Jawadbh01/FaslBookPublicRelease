@@ -36,14 +36,6 @@ import ApprovalsPage from "@/pages/approvals/page";
 import NotificationsPage from "@/pages/notifications/page";
 import ProfilePage from "@/pages/profile/page";
 import ReportsPage from "@/pages/reports/page";
-import ReportsFarmPage from "@/pages/reports/farm/page";
-import ReportsFarmerPage from "@/pages/reports/farmer/page";
-import ReportsWorkerPage from "@/pages/reports/worker/page";
-import ReportsDealerPage from "@/pages/reports/dealer/page";
-import ReportsGodownPage from "@/pages/reports/godown/page";
-import ReportsParcelPage from "@/pages/reports/parcel/page";
-import ReportsLedgerPage from "@/pages/reports/ledger/page";
-import ReportsCropsPage from "@/pages/reports/crops/page";
 import PrintHubPage from "@/pages/reports/print/page";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -146,30 +138,6 @@ function AnimatedSwitch() {
         </Route>
         <Route path="/reports">
           {() => <DashboardLayout><ReportsPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/farm">
-          {() => <DashboardLayout><ReportsFarmPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/farmer">
-          {() => <DashboardLayout><ReportsFarmerPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/worker">
-          {() => <DashboardLayout><ReportsWorkerPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/dealer">
-          {() => <DashboardLayout><ReportsDealerPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/godown">
-          {() => <DashboardLayout><ReportsGodownPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/parcel">
-          {() => <DashboardLayout><ReportsParcelPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/ledger">
-          {() => <DashboardLayout><ReportsLedgerPage /></DashboardLayout>}
-        </Route>
-        <Route path="/reports/crops">
-          {() => <DashboardLayout><ReportsCropsPage /></DashboardLayout>}
         </Route>
         <Route path="/reports/print">
           {() => <DashboardLayout><PrintHubPage /></DashboardLayout>}
