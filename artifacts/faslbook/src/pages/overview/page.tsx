@@ -15,7 +15,7 @@ import {
   Package, Plus, ArrowUpRight,
   ArrowDownRight, Wheat, Clock,
   Users, LayoutGrid, Bell, MapPin,
-  ChevronRight, Copy, Check, HandCoins, Printer, X,
+  ChevronRight, Copy, Check, HandCoins, Printer,
   BarChart2, User, Handshake, Warehouse, Map,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -48,23 +48,12 @@ const getGreeting = (): "good_morning" | "good_afternoon" | "good_evening" => {
   return "good_evening";
 };
 
-const PRINT_REPORTS = [
-  { key: "farm",    label: "Farm Overview",  Icon: BarChart2,  color: "#1B5E20", bg: "#E8F5E9",  href: "/reports/print?type=summary" },
-  { key: "ledger",  label: "Khata Report",   Icon: TrendingUp, color: "#1B5E20", bg: "#E8F5E9",  href: "/reports/print?type=ledger" },
-  { key: "crops",   label: "Crops Report",   Icon: Wheat,      color: "#33691E", bg: "#F1F8E9",  href: "/reports/print?type=expense" },
-  { key: "farmer",  label: "Farmer Report",  Icon: User,       color: "#1565C0", bg: "#E3F2FD",  href: "/reports/print?type=ledger" },
-  { key: "worker",  label: "Worker Report",  Icon: Clock,      color: "#E65100", bg: "#FFF3E0",  href: "/reports/print?type=expense" },
-  { key: "dealer",  label: "Dealer Report",  Icon: Handshake,  color: "#6A1B9A", bg: "#F3E5F5",  href: "/reports/print?type=sales" },
-  { key: "godown",  label: "Godown Report",  Icon: Warehouse,  color: "#00695C", bg: "#E0F2F1",  href: "/reports/print?type=godown" },
-  { key: "parcel",  label: "Parcel Report",  Icon: Map,        color: "#4E342E", bg: "#EFEBE9",  href: "/reports/print?type=parcel" },
-];
 
 export default function OverviewPage() {
   const { organization, role, user } = useAuthStore();
   const { t } = useLangStore();
   
   const orgId = organization?.id;
-  const [showPrintPicker, setShowPrintPicker] = useState(false);
 
   // Prefetch likely next pages so navigation feels instant
   useEffect(() => {
@@ -296,7 +285,7 @@ export default function OverviewPage() {
           {/* Right icons */}
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowPrintPicker(true)}
+              onClick={() => { window.location.href = "/reports/print"; }}
               className="w-9 h-9 rounded-full flex items-center justify-center"
               style={{ backgroundColor: "rgba(255,255,255,0.2)" }}
             >
@@ -452,73 +441,6 @@ export default function OverviewPage() {
         </div>
       )}
 
-      {/* ── Print Picker Bottom Sheet ─────────────────────────── */}
-      {showPrintPicker && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col justify-end"
-          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
-          onClick={() => setShowPrintPicker(false)}
-        >
-          {/* Sheet — max 80% of viewport, flex column so header is sticky and list scrolls */}
-          <div
-            className="bg-white rounded-t-3xl flex flex-col"
-            style={{ maxHeight: "80vh", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* ── Fixed header ── */}
-            <div className="px-5 pt-4 pb-3 shrink-0">
-              {/* Drag handle */}
-              <div className="flex justify-center mb-4">
-                <div className="w-10 h-1 rounded-full bg-gray-200" />
-              </div>
-
-              {/* Title row */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center"
-                    style={{ backgroundColor: "#E8F5E9" }}
-                  >
-                    <Printer size={16} color="#1B5E20" />
-                  </div>
-                  <p className="font-bold text-gray-800 text-base">Print a Report</p>
-                </div>
-                <button
-                  onClick={() => setShowPrintPicker(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100"
-                >
-                  <X size={16} color="#757575" />
-                </button>
-              </div>
-              <p className="text-gray-400 text-xs mt-1 ml-10">Tap a section to open its printable report</p>
-            </div>
-
-            {/* Thin divider */}
-            <div className="shrink-0 border-t border-gray-100 mx-5" />
-
-            {/* ── Scrollable list ── */}
-            <div className="overflow-y-auto flex-1 px-5 py-3 flex flex-col gap-2 pb-6">
-              {PRINT_REPORTS.map(({ key, label, Icon, color, bg, href }) => (
-                <button
-                  key={key}
-                  onClick={() => { setShowPrintPicker(false); window.location.href = href; }}
-                  className="flex items-center gap-3 px-4 py-3.5 rounded-2xl active:scale-95 transition-transform w-full text-left shrink-0"
-                  style={{ backgroundColor: bg }}
-                >
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: "rgba(255,255,255,0.7)" }}
-                  >
-                    <Icon size={20} color={color} />
-                  </div>
-                  <span className="flex-1 text-sm font-bold" style={{ color }}>{label}</span>
-                  <ChevronRight size={16} color={color} style={{ opacity: 0.6 }} />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Recent Activity ───────────────────────────────────── */}
       <div className="px-4 mt-4">
