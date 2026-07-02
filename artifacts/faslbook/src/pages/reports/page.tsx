@@ -6,7 +6,7 @@ import {
   Printer, MessageCircle, Calendar,
   TrendingUp, TrendingDown, ChevronRight, FileText,
 } from "lucide-react";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 
@@ -14,12 +14,12 @@ const fmtPKR = (n: number) => "Rs. " + n.toLocaleString("en-PK");
 
 const REPORT_CARDS = [
   { key:"print",   title:"Print Reports",    description:"Professional A4 ledger, parcel, stock & expense reports", Icon:Printer,         color:"#1B5E20", bg:"#E8F5E9",  href:"/reports/print" },
-  { key:"farm",    title:"Farm Overview",    description:"Income, expenses & net profit summary",                   Icon:BarChart2,       color:"#1565C0", bg:"#E3F2FD",  href:"/reports/farm"  },
-  { key:"farmer",  title:"Farmer Report",    description:"Parcels, crops & harvest per farmer",                     Icon:User,            color:"#6A1B9A", bg:"#F3E5F5",  href:"/reports/farmer"},
-  { key:"worker",  title:"Worker Report",    description:"Attendance, earnings & payments",                         Icon:Clock,           color:"#E65100", bg:"#FFF3E0",  href:"/reports/worker"},
-  { key:"dealer",  title:"Dealer Report",    description:"Purchases, payments & outstanding balance",               Icon:Handshake,       color:"#00695C", bg:"#E0F2F1",  href:"/reports/dealer"},
-  { key:"godown",  title:"Godown Report",    description:"Stock levels, value & transactions",                      Icon:Warehouse,       color:"#4E342E", bg:"#EFEBE9",  href:"/reports/godown"},
-  { key:"parcel",  title:"Parcel Report",    description:"Crop history, expenses & profitability",                  Icon:Map,             color:"#C62828", bg:"#FFEBEE",  href:"/reports/parcel"},
+  { key:"farm",    title:"Farm Overview",    description:"Income, expenses & net profit summary",                   Icon:BarChart2,       color:"#1565C0", bg:"#E3F2FD",  href:"/reports/print?type=summary" },
+  { key:"farmer",  title:"Farmer Report",    description:"Parcels, crops & harvest per farmer",                     Icon:User,            color:"#6A1B9A", bg:"#F3E5F5",  href:"/reports/print?type=ledger"  },
+  { key:"worker",  title:"Worker Report",    description:"Attendance, earnings & payments",                         Icon:Clock,           color:"#E65100", bg:"#FFF3E0",  href:"/reports/print?type=summary" },
+  { key:"dealer",  title:"Dealer Report",    description:"Purchases, payments & outstanding balance",               Icon:Handshake,       color:"#00695C", bg:"#E0F2F1",  href:"/reports/print?type=expense" },
+  { key:"godown",  title:"Godown Report",    description:"Stock levels, value & transactions",                      Icon:Warehouse,       color:"#4E342E", bg:"#EFEBE9",  href:"/reports/print?type=godown"  },
+  { key:"parcel",  title:"Parcel Report",    description:"Crop history, expenses & profitability",                  Icon:Map,             color:"#C62828", bg:"#FFEBEE",  href:"/reports/print?type=parcel"  },
 ];
 
 export default function ReportsPage() {
@@ -52,12 +52,14 @@ export default function ReportsPage() {
 
   async function getExportData() {
     if (!orgId) return { columns: [] as string[], rows: [] as (string|number)[][] };
-    const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId), orderBy("date","desc")));
+    const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId)));
     const columns = ["Date","Type","Category","Amount (Rs)","Notes"];
-    const rows: (string|number)[][] = snap.docs.map((d) => {
-      const data = d.data();
-      return [data.date??"", data.type==="credit"?"Income":"Expense", data.categoryLabel??data.category??"", Number(data.amount)||0, data.notes??""];
-    });
+    const rows: (string|number)[][] = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return [data.date??"", data.type==="credit"?"Income":"Expense", data.categoryLabel??data.category??"", Number(data.amount)||0, data.notes??""];
+      })
+      .sort((a, b) => String(b[0]).localeCompare(String(a[0])));
     return { columns, rows };
   }
 
