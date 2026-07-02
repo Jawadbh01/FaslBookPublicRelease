@@ -142,6 +142,31 @@ function AnimatedSwitch() {
         <Route path="/reports/print">
           {() => <DashboardLayout><PrintHubPage /></DashboardLayout>}
         </Route>
+        {/* Legacy report routes — redirect to print hub with matching type */}
+        <Route path="/reports/farm">
+          {() => { window.location.replace("/reports/print?type=summary"); return null; }}
+        </Route>
+        <Route path="/reports/farmer">
+          {() => { window.location.replace("/reports/print?type=ledger"); return null; }}
+        </Route>
+        <Route path="/reports/worker">
+          {() => { window.location.replace("/reports/print?type=summary"); return null; }}
+        </Route>
+        <Route path="/reports/dealer">
+          {() => { window.location.replace("/reports/print?type=expense"); return null; }}
+        </Route>
+        <Route path="/reports/godown">
+          {() => { window.location.replace("/reports/print?type=godown"); return null; }}
+        </Route>
+        <Route path="/reports/parcel">
+          {() => { window.location.replace("/reports/print?type=parcel"); return null; }}
+        </Route>
+        <Route path="/reports/ledger">
+          {() => { window.location.replace("/reports/print?type=ledger"); return null; }}
+        </Route>
+        <Route path="/reports/crops">
+          {() => { window.location.replace("/reports/print?type=parcel"); return null; }}
+        </Route>
 
         <Route>
           {() => { window.location.replace("/login"); return null; }}
