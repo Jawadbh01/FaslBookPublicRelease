@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import {
   collection, query, where, onSnapshot,
-  addDoc, serverTimestamp,
+  addDoc, serverTimestamp, updateDoc, doc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase/config";
@@ -140,6 +140,10 @@ export default function LedgerPage() {
   const [successMsg, setSuccessMsg]   = useState({ title: "", sub: "" });
   const [formError, setFormError]     = useState("");
   const [receiptViewUrl, setReceiptViewUrl] = useState<string | null>(null);
+  const [detailEntry, setDetailEntry] = useState<LedgerEntry | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({ amount: "", date: "", notes: "" });
+  const [editSaving, setEditSaving] = useState(false);
 
   // ── Auto-open form from query param ───────────────────────
   useEffect(() => {
@@ -564,6 +568,154 @@ export default function LedgerPage() {
         <ReceiptModal url={receiptViewUrl} onClose={() => setReceiptViewUrl(null)} />
       )}
 
+      {/* Entry detail / edit modal */}
+      {detailEntry && (() => {
+        const isCredit = detailEntry.type === "credit";
+        const cfg = isCredit ? incomeTypes[detailEntry.category] : expenseCategories[detailEntry.category];
+        const label = detailEntry.categoryLabel || cfg?.label || detailEntry.category;
+        const photoUrl = detailEntry.receiptUrl || detailEntry.proofUrl || "";
+
+        const startEdit = () => {
+          setEditForm({
+            amount: String(detailEntry.amount),
+            date: detailEntry.date,
+            notes: detailEntry.notes || "",
+          });
+          setEditMode(true);
+        };
+
+        const saveEdit = async () => {
+          if (!editForm.amount || Number(editForm.amount) <= 0) return;
+          setEditSaving(true);
+          try {
+            await updateDoc(doc(db, "ledgerEntries", detailEntry.id), {
+              amount: Number(editForm.amount),
+              date: editForm.date,
+              notes: editForm.notes,
+              edited: true,
+              editedAt: serverTimestamp(),
+              editedBy: auth.currentUser?.uid || null,
+            });
+            setDetailEntry(null);
+            setEditMode(false);
+          } catch (e) {
+            console.error(e);
+          } finally {
+            setEditSaving(false);
+          }
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setDetailEntry(null); setEditMode(false); }}>
+            <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-lg font-bold text-gray-800">{editMode ? "Edit Entry" : `${cfg?.emoji || (isCredit ? "💰" : "📋")} ${label}`}</h2>
+                  {(detailEntry as any).edited && !editMode && <p className="text-gray-400 text-xs italic">Edited</p>}
+                </div>
+                <button onClick={() => { setDetailEntry(null); setEditMode(false); }}><X size={22} color="#9CA3AF" /></button>
+              </div>
+
+              {!editMode ? (
+                <>
+                  <div className="space-y-3 mb-6">
+                    <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                      <span className="text-gray-500 text-sm">Amount</span>
+                      <span className="font-bold text-base" style={{ color: isCredit ? "#1B5E20" : "#B71C1C" }}>
+                        {isCredit ? "+" : "−"}{fmtPKR(detailEntry.amount)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                      <span className="text-gray-500 text-sm">Type</span>
+                      <span className="text-gray-800 text-sm font-medium">{isCredit ? "Credit" : "Debit"}</span>
+                    </div>
+                    <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                      <span className="text-gray-500 text-sm">Date</span>
+                      <span className="text-gray-800 text-sm font-medium">{fmtDate(detailEntry.date)}</span>
+                    </div>
+                    {detailEntry.parcelName && (
+                      <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                        <span className="text-gray-500 text-sm">Parcel</span>
+                        <span className="text-gray-800 text-sm font-medium">{detailEntry.parcelName}</span>
+                      </div>
+                    )}
+                    {detailEntry.dealerName && (
+                      <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                        <span className="text-gray-500 text-sm">Dealer</span>
+                        <span className="text-gray-800 text-sm font-medium">{detailEntry.dealerName}</span>
+                      </div>
+                    )}
+                    {detailEntry.notes && (
+                      <div className="py-2">
+                        <span className="text-gray-500 text-sm block mb-1">Notes</span>
+                        <span className="text-gray-800 text-sm">{detailEntry.notes}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {photoUrl && (
+                    <button
+                      onClick={() => setReceiptViewUrl(photoUrl)}
+                      className="w-full mb-3 py-3 rounded-2xl border-2 border-gray-200 text-gray-700 font-semibold text-sm flex items-center justify-center gap-2"
+                    >
+                      <Receipt size={16} /> View Receipt
+                    </button>
+                  )}
+
+                  {canEdit && (
+                    <button
+                      onClick={startEdit}
+                      className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
+                      style={{ backgroundColor: "#1B5E20" }}
+                    >
+                      Edit Entry
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="mb-4">
+                    <label className="text-gray-600 text-sm font-medium mb-2 block">Amount (Rs.)</label>
+                    <input
+                      type="number"
+                      value={editForm.amount}
+                      onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                      className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="text-gray-600 text-sm font-medium mb-2 block">Date</label>
+                    <input
+                      type="date"
+                      value={editForm.date}
+                      onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                      className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700"
+                    />
+                  </div>
+                  <div className="mb-6">
+                    <label className="text-gray-600 text-sm font-medium mb-2 block">Notes</label>
+                    <textarea
+                      value={editForm.notes}
+                      onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                      rows={2}
+                      className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base resize-none focus:border-green-700"
+                    />
+                  </div>
+                  <button
+                    onClick={saveEdit}
+                    disabled={editSaving}
+                    className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+                    style={{ backgroundColor: "#1B5E20" }}
+                  >
+                    {editSaving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Header ── */}
       <div className="px-4 pt-12 pb-5" style={{ backgroundColor: "#1B5E20" }}>
         <div className="flex items-center justify-between">
@@ -656,13 +808,19 @@ export default function LedgerPage() {
                   </div>
 
                   {/* Title + details */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-gray-800 font-semibold text-sm truncate">{emoji} {label}</p>
+                  <button
+                    onClick={() => { setDetailEntry(entry); setEditMode(false); }}
+                    className="flex-1 min-w-0 text-left"
+                  >
+                    <p className="text-gray-800 font-semibold text-sm truncate">
+                      {emoji} {label}
+                      {(entry as any).edited && <span className="text-gray-400 font-normal italic text-xs"> (edited)</span>}
+                    </p>
                     <p className="text-xs" style={{ color: isCredit ? "#1B5E20" : "#B71C1C" }}>
                       {isCredit ? "Credit" : "Debit"}{entry.parcelName ? ` • ${entry.parcelName}` : ""}
                     </p>
                     {entry.notes ? <p className="text-gray-400 text-xs truncate">{entry.notes}</p> : null}
-                  </div>
+                  </button>
 
                   {/* Amount + receipt button */}
                   <div className="shrink-0 text-right flex flex-col items-end gap-1.5">

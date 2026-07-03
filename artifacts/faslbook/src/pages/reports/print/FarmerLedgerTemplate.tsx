@@ -17,6 +17,7 @@ interface Entry {
 
 interface Props {
   farmerName: string;
+  farmerPhone?: string;
   farmName: string;
   printedBy: string;
   dateFrom: string;
@@ -25,7 +26,7 @@ interface Props {
   entries: Entry[];
 }
 
-export default function FarmerLedgerTemplate({ farmerName, farmName, printedBy, dateFrom, dateTo, openingBalance, entries }: Props) {
+export default function FarmerLedgerTemplate({ farmerName, farmerPhone, farmName, printedBy, dateFrom, dateTo, openingBalance, entries }: Props) {
   let running = openingBalance;
   const rows = entries.map(e => {
     const debit  = e.type === "debit"  ? e.amount : 0;
@@ -55,6 +56,7 @@ export default function FarmerLedgerTemplate({ farmerName, farmName, printedBy, 
         <div className="section-title">Account Information</div>
         <div className="info-grid">
           <span className="label">Farmer Name</span><span className="value">{farmerName}</span>
+          {farmerPhone && <><span className="label">Phone</span><span className="value">{farmerPhone}</span></>}
           <span className="label">Opening Balance</span>
           <span className="value" style={{ color: openingBalance >= 0 ? "#1B5E20" : "#C62828" }}>
             {fmtPKR(openingBalance)} {openingBalance < 0 ? "(Dr)" : "(Cr)"}

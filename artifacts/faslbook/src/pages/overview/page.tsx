@@ -151,7 +151,6 @@ export default function OverviewPage() {
   }, [orgId, role]);
 
   const profit = income - expense;
-  const season = getSeason();
 
   // ── Summary cards ─────────────────────────────────────────────
   const cards = [
@@ -196,12 +195,12 @@ export default function OverviewPage() {
       href: "/inventory",
     },
     {
-      label: "Crops",
-      urdu: "فصل",
-      icon: Wheat,
-      color: "#16A34A",
-      bg: "#DCFCE7",
-      href: "/crops",
+      label: "Report",
+      urdu: "رپورٹ",
+      icon: Printer,
+      color: "#1565C0",
+      bg: "#E3F2FD",
+      href: "/reports/print",
     },
     {
       label: "Team",
@@ -345,27 +344,6 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* ── Current Season Card ───────────────────────────────── */}
-      <div className="px-4 mt-4">
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="flex">
-            <div className="w-1 shrink-0" style={{ backgroundColor: "#1B5E20" }} />
-            <div className="flex-1 px-4 py-3 flex items-center justify-between">
-              <div>
-                <p className="text-gray-400 text-xs">{t("current_season")}</p>
-                <p className="font-bold text-gray-800">{t(season)}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-7 h-7 rounded-full flex items-center justify-center" style={{ backgroundColor: "#E8F5E9" }}>
-                  <Wheat size={14} color="#1B5E20" />
-                </div>
-                <p className="text-gray-400 text-xs">{t("no_crops")}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ── Quick Actions ─────────────────────────────────────── */}
       <div className="px-4 mt-4">
         <div className="flex items-center justify-between mb-3">
@@ -408,10 +386,10 @@ export default function OverviewPage() {
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
             {recentLedger.map((entry, i) => {
               const isCredit = entry.type === "credit";
-              const label = entry.description ||
+              const label = entry.categoryLabel || entry.category ||
                 (entry.sourceType
                   ? entry.sourceType.charAt(0).toUpperCase() + entry.sourceType.slice(1)
-                  : entry.categoryLabel || entry.category || "Transaction");
+                  : "Transaction");
               const fmtEntryDate = (dateStr: string) => {
                 if (!dateStr) return "";
                 const [, m, d] = dateStr.split("-");
@@ -468,7 +446,16 @@ export default function OverviewPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-gray-800 text-sm font-medium truncate">
-                      {item.description || item.action}
+                      {(() => {
+                        const a = item.action || "";
+                        if (a.includes("EXPENSE")) return "Expense Added";
+                        if (a.includes("INCOME")) return "Income Added";
+                        if (a.includes("DEALER_PURCHASE")) return "Dealer Purchase";
+                        if (a.includes("DEALER_PAYMENT")) return "Dealer Payment";
+                        if (a.includes("INVENTORY")) return "Inventory Update";
+                        if (a.includes("ATTENDANCE")) return "Attendance Marked";
+                        return item.categoryLabel || item.category || a.replace(/_/g, " ") || "Activity";
+                      })()}
                     </p>
                     <p className="text-gray-400 text-xs">{item.userName || "System"}</p>
                   </div>

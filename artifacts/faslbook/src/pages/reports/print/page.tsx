@@ -174,6 +174,7 @@ export default function PrintHubPage() {
               };
             })
             .filter(e => {
+              if (selectedFarmer && e.farmerId !== selectedFarmer) return false;
               if (dateFrom && e.date && e.date < dateFrom) return false;
               if (dateTo   && e.date && e.date > dateTo)   return false;
               return true;
@@ -342,7 +343,7 @@ export default function PrintHubPage() {
       );
 
       if (activeReport==="ledger") return (
-        <FarmerLedgerTemplate farmerName={selectedFarmerObj?.name||"All Farmers"} farmName={orgName}
+        <FarmerLedgerTemplate farmerName={selectedFarmerObj?.name||"All Farmers"} farmerPhone={selectedFarmerObj?.phone} farmName={orgName}
           printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} openingBalance={0} entries={ledgerEntries} />
       );
       if (activeReport==="parcel") return (
@@ -448,6 +449,7 @@ export default function PrintHubPage() {
                   </p>
                 ) : (
                   <Select value={selectedFarmer} onChange={setSelectedFarmer}>
+                    <option value="">All Farmers</option>
                     {farmers.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                   </Select>
                 )}

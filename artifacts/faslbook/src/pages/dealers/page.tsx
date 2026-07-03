@@ -11,6 +11,7 @@ import {
   Plus, X, Loader2, Phone, MapPin,
   Handshake, CreditCard,
   ArrowDownLeft, ArrowUpRight, Check, Printer,
+  ChevronDown, ChevronUp, Pencil,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -25,6 +26,29 @@ interface Dealer {
   organizationId: string;
   createdAt: any;
 }
+
+interface DealerTx {
+  id: string;
+  dealerId: string;
+  dealerName: string;
+  type: "purchase" | "payment";
+  items: string;
+  amount: number;
+  paymentType: "cash" | "credit";
+  date: any;
+  notes: string;
+  edited?: boolean;
+  editedAt?: any;
+  createdAt: any;
+}
+
+const fmtTxDate = (d: any) => {
+  try {
+    const dt = d?.toDate ? d.toDate() : new Date(d);
+    if (isNaN(dt.getTime())) return "";
+    return dt.toLocaleDateString("en-PK", { day: "numeric", month: "short", year: "numeric" });
+  } catch { return ""; }
+};
 
 export default function DealersPage() {
   const { organization, role } = useAuthStore();
@@ -52,6 +76,26 @@ export default function DealersPage() {
     date: new Date().toISOString().split("T")[0],
     notes: "",
   });
+
+  const [dealerTxns, setDealerTxns] = useState<DealerTx[]>([]);
+  const [expandedDealer, setExpandedDealer] = useState<string | null>(null);
+  const [editingTx, setEditingTx] = useState<DealerTx | null>(null);
+  const [editForm, setEditForm] = useState({
+    items: "", amount: "", paymentType: "credit" as "cash" | "credit",
+    date: new Date().toISOString().split("T")[0], notes: "",
+  });
+
+  useEffect(() => {
+    if (!orgId) return;
+    const unsub = onSnapshot(
+      query(collection(db, "dealerTransactions"), where("organizationId", "==", orgId)),
+      (snap) => {
+        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DealerTx));
+        setDealerTxns(data);
+      }
+    );
+    return () => unsub();
+  }, [orgId]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -177,6 +221,72 @@ export default function DealersPage() {
     } catch (err) {
       console.error(err);
       setError("Failed to save transaction.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditTx = (tx: DealerTx) => {
+    setEditingTx(tx);
+    setEditForm({
+      items: tx.items || "",
+      amount: String(tx.amount || ""),
+      paymentType: tx.paymentType || "credit",
+      date: tx.date?.toDate ? tx.date.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      notes: tx.notes || "",
+    });
+  };
+
+  const handleSaveEditTx = async () => {
+    if (!editingTx) return;
+    if (!editForm.amount || isNaN(Number(editForm.amount))) {
+      setError("Please enter a valid amount");
+      return;
+    }
+    try {
+      setSaving(true);
+      setError("");
+      const newAmount = Number(editForm.amount);
+      const oldAmount = editingTx.amount || 0;
+      const delta = newAmount - oldAmount;
+
+      await updateDoc(doc(db, "dealerTransactions", editingTx.id), {
+        items: editForm.items,
+        amount: newAmount,
+        paymentType: editForm.paymentType,
+        date: new Date(editForm.date),
+        notes: editForm.notes,
+        edited: true,
+        editedAt: serverTimestamp(),
+      });
+
+      if (delta !== 0) {
+        const dealer = dealers.find((d) => d.id === editingTx.dealerId);
+        if (dealer) {
+          const field = editingTx.type === "purchase" ? "totalPurchased" : "totalPaid";
+          await updateDoc(doc(db, "dealers", dealer.id), {
+            [field]: (dealer[field as "totalPurchased" | "totalPaid"] || 0) + delta,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      await addDoc(collection(db, "activityLogs"), {
+        organizationId: orgId,
+        userId: auth.currentUser?.uid || "",
+        userName: auth.currentUser?.displayName || "",
+        action: "DEALER_TX_EDITED",
+        description: `Edited ${editingTx.type} of Rs. ${oldAmount} → Rs. ${newAmount} for ${editingTx.dealerName}`,
+        recordId: editingTx.id,
+        recordType: "dealerTransactions",
+        createdAt: serverTimestamp(),
+        syncStatus: "synced",
+      });
+
+      setEditingTx(null);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to update transaction.");
     } finally {
       setSaving(false);
     }
@@ -525,7 +635,7 @@ export default function DealersPage() {
                   )}
 
                   {canEdit && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 mb-2">
                       <button
                         onClick={() => {
                           setSelectedDealer(dealer);
@@ -552,6 +662,56 @@ export default function DealersPage() {
                       </button>
                     </div>
                   )}
+
+                  {(() => {
+                    const txns = dealerTxns
+                      .filter((t) => t.dealerId === dealer.id)
+                      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+                    if (txns.length === 0) return null;
+                    const isExpanded = expandedDealer === dealer.id;
+                    return (
+                      <div className="border-t border-gray-100 pt-2">
+                        <button
+                          onClick={() => setExpandedDealer(isExpanded ? null : dealer.id)}
+                          className="w-full flex items-center justify-between py-1"
+                        >
+                          <span className="text-xs font-semibold text-gray-500">
+                            {txns.length} transaction{txns.length !== 1 ? "s" : ""}
+                          </span>
+                          {isExpanded ? <ChevronUp size={16} color="#9CA3AF" /> : <ChevronDown size={16} color="#9CA3AF" />}
+                        </button>
+                        {isExpanded && (
+                          <div className="flex flex-col gap-1.5 mt-1">
+                            {txns.map((tx) => (
+                              <div key={tx.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: "#F9FAFB" }}>
+                                <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                                  style={{ backgroundColor: tx.type === "purchase" ? "#FFEBEE" : "#E8F5E9" }}>
+                                  {tx.type === "purchase"
+                                    ? <ArrowDownLeft size={13} color="#C62828" />
+                                    : <ArrowUpRight size={13} color="#1B5E20" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-gray-800 truncate">
+                                    {tx.type === "purchase" ? (tx.items || "Purchase") : "Payment"}
+                                    {tx.edited && <span className="text-gray-400 font-normal italic"> (edited)</span>}
+                                  </p>
+                                  <p className="text-[10px] text-gray-400">{fmtTxDate(tx.date)}</p>
+                                </div>
+                                <p className="text-xs font-bold shrink-0" style={{ color: tx.type === "purchase" ? "#C62828" : "#1B5E20" }}>
+                                  {tx.type === "purchase" ? "+" : "−"}{fmt(tx.amount)}
+                                </p>
+                                {canEdit && (
+                                  <button onClick={() => openEditTx(tx)} className="p-1.5 rounded-full active:scale-95 transition-transform shrink-0">
+                                    <Pencil size={13} color="#6B7280" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -567,6 +727,100 @@ export default function DealersPage() {
         >
           <Plus size={26} color="white" />
         </button>
+      )}
+
+      {/* ── Edit Transaction Modal ─────────────────────────────── */}
+      {editingTx && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => setEditingTx(null)}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">
+                  Edit {editingTx.type === "purchase" ? "Purchase" : "Payment"}
+                </h2>
+                <p className="text-gray-400 text-xs">{editingTx.dealerName}</p>
+              </div>
+              <button onClick={() => setEditingTx(null)}><X size={22} color="#9CA3AF" /></button>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-4">{error}</div>
+            )}
+
+            {editingTx.type === "purchase" && (
+              <div className="mb-4">
+                <label className="text-gray-600 text-sm font-medium mb-2 block">Items Purchased</label>
+                <input
+                  type="text"
+                  value={editForm.items}
+                  onChange={(e) => setEditForm({ ...editForm, items: e.target.value })}
+                  className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700"
+                />
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="text-gray-600 text-sm font-medium mb-2 block">Amount (Rs.)</label>
+              <input
+                type="number"
+                value={editForm.amount}
+                onChange={(e) => setEditForm({ ...editForm, amount: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700"
+              />
+            </div>
+
+            {editingTx.type === "purchase" && (
+              <div className="mb-4">
+                <label className="text-gray-600 text-sm font-medium mb-3 block">Payment Type</label>
+                <div className="flex gap-3">
+                  {[{ val: "cash", label: "Cash" }, { val: "credit", label: "Credit" }].map(({ val, label }) => (
+                    <button
+                      key={val}
+                      onClick={() => setEditForm({ ...editForm, paymentType: val as any })}
+                      className="flex-1 py-2.5 rounded-2xl border-2 flex items-center justify-center gap-2"
+                      style={{
+                        borderColor: editForm.paymentType === val ? "#1B5E20" : "#E5E7EB",
+                        backgroundColor: editForm.paymentType === val ? "#E8F5E9" : "white",
+                      }}
+                    >
+                      {editForm.paymentType === val && <Check size={14} color="#1B5E20" />}
+                      <span className="font-semibold text-sm" style={{ color: editForm.paymentType === val ? "#1B5E20" : "#6B7280" }}>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="text-gray-600 text-sm font-medium mb-2 block">Date</label>
+              <input
+                type="date"
+                value={editForm.date}
+                onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="text-gray-600 text-sm font-medium mb-2 block">Notes</label>
+              <textarea
+                value={editForm.notes}
+                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                rows={2}
+                className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base resize-none focus:border-green-700"
+              />
+            </div>
+
+            <button
+              onClick={handleSaveEditTx}
+              disabled={saving}
+              className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+              style={{ backgroundColor: "#1B5E20" }}
+            >
+              {saving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
