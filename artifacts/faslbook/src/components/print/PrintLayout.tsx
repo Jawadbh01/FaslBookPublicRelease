@@ -4,6 +4,17 @@
  *   <PrintLayout reportName="Farmer Ledger" filters={["Farmer: Ali", "Period: Jan 2025"]} printedBy="Manager">
  *     ... report content ...
  *   </PrintLayout>
+ *
+ * Print pagination design:
+ *  - Header and footer are `position: fixed` so the browser repeats them on every printed page.
+ *  - The content wrapper reserves matching top/bottom padding so body content never renders
+ *    underneath the fixed header/footer on any page (this was the main cause of "collapsing"
+ *    layout — header only showed on page 1, and footer could overlap the last lines of content).
+ *  - `.print-section` no longer forces `page-break-inside: avoid` by default, because sections
+ *    that wrap a long data table (Expense/Sales/Godown/Parcel reports) are often taller than a
+ *    single page — forcing them to avoid breaking causes the browser to cut/overlap content
+ *    instead of paginating it. Only short, fixed-height blocks (info grids, summaries) opt into
+ *    `.print-section-compact` to avoid breaking mid-block.
  */
 
 interface Props {
@@ -14,19 +25,16 @@ interface Props {
   children: React.ReactNode;
 }
 
+const HEADER_CLEARANCE = 92; // px reserved at top of every printed page for the fixed header
+const FOOTER_CLEARANCE = 46; // px reserved at bottom of every printed page for the fixed footer
+
 export const PRINT_CSS = `
   @media print {
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    html, body { margin: 0; padding: 0; font-family: 'Times New Roman', Times, serif; font-size: 11pt; background: white; }
+    html, body { margin: 0; padding: 0; background: white; }
     .no-print, nav, header, .bottom-nav, #root > div > nav { display: none !important; }
     .print-page { display: block !important; }
-    .print-table { width: 100%; border-collapse: collapse; }
-    .print-table thead { display: table-header-group; }
-    .print-table tfoot { display: table-footer-group; }
-    .print-table tr { page-break-inside: avoid; }
-    .print-section { page-break-inside: avoid; margin-bottom: 12pt; }
-    .page-break { page-break-before: always; }
-    @page { size: A4 portrait; margin: 18mm 15mm 22mm 15mm; }
+    @page { size: A4 portrait; margin: 12mm 14mm; }
   }
   .print-page { display: none; }
 `;
@@ -37,10 +45,10 @@ function PrintHeader({ reportName, filters, printedBy, farmName }: Omit<Props, "
   const timeStr = now.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div style={{
+    <div className="print-header" style={{
       borderBottom: "2.5px solid #1B5E20",
-      paddingBottom: 10,
-      marginBottom: 14,
+      paddingBottom: 8,
+      background: "white",
     }}>
       {/* Top row: logo + title block */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
@@ -48,16 +56,15 @@ function PrintHeader({ reportName, filters, printedBy, farmName }: Omit<Props, "
           <img
             src="/logo.png"
             alt="FaslBook"
-            style={{ width: 44, height: 44, objectFit: "contain", borderRadius: 6 }}
+            style={{ width: 34, height: 34, objectFit: "contain", borderRadius: 6 }}
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
           />
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: "#1B5E20", letterSpacing: 0.5 }}>FaslBook</div>
-            <div style={{ fontSize: 9, color: "#555", marginTop: 1 }}>Farm Management System</div>
-            {farmName && <div style={{ fontSize: 9, color: "#777" }}>{farmName}</div>}
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#1B5E20", letterSpacing: 0.5 }}>FaslBook</div>
+            <div style={{ fontSize: 8, color: "#555", marginTop: 1 }}>Farm Management System{farmName ? ` — ${farmName}` : ""}</div>
           </div>
         </div>
-        <div style={{ textAlign: "right", fontSize: 9, color: "#555", lineHeight: 1.7 }}>
+        <div style={{ textAlign: "right", fontSize: 8, color: "#555", lineHeight: 1.5 }}>
           <div><strong>Generated:</strong> {dateStr} {timeStr}</div>
           {printedBy && <div><strong>Printed By:</strong> {printedBy}</div>}
           {filters && filters.length > 0 && filters.map((f, i) => (
@@ -67,10 +74,10 @@ function PrintHeader({ reportName, filters, printedBy, farmName }: Omit<Props, "
       </div>
       {/* Report name */}
       <div style={{
-        marginTop: 8,
-        padding: "4px 0",
+        marginTop: 5,
+        padding: "3px 0 0 0",
         borderTop: "1px solid #ccc",
-        fontSize: 13,
+        fontSize: 11.5,
         fontWeight: 700,
         color: "#111",
         letterSpacing: 0.3,
@@ -83,23 +90,19 @@ function PrintHeader({ reportName, filters, printedBy, farmName }: Omit<Props, "
 
 function PrintFooter() {
   return (
-    <div style={{
-      position: "fixed",
-      bottom: 0,
-      left: 0,
-      right: 0,
+    <div className="print-footer" style={{
       borderTop: "1px solid #ccc",
-      padding: "5px 15mm",
+      padding: "4px 0 0 0",
       display: "flex",
       justifyContent: "space-between",
       alignItems: "center",
-      fontSize: 8,
+      fontSize: 7.5,
       color: "#777",
       background: "white",
     }}>
       <span>Generated by FaslBook — Farm Management System</span>
       <span>Signature: _________________________</span>
-      <span className="page-number"></span>
+      <span className="page-number" />
     </div>
   );
 }
@@ -111,10 +114,17 @@ export default function PrintLayout({ reportName, filters, printedBy, farmName, 
       fontSize: 11,
       color: "#111",
       background: "white",
-      padding: "0",
-      minHeight: "100vh",
     }}>
       <style>{`
+        .print-page {
+          font-family: 'Times New Roman', Times, serif;
+        }
+        .print-header, .print-footer {
+          position: static;
+        }
+        .print-body {
+          padding: 0;
+        }
         .print-table { width: 100%; border-collapse: collapse; font-family: 'Times New Roman', Times, serif; }
         .print-table th {
           background: #1B5E20 !important; color: white !important;
@@ -142,16 +152,43 @@ export default function PrintLayout({ reportName, filters, printedBy, farmName, 
         .summary-row { display: flex; justify-content: space-between; padding: 5px 10px; border: 1px solid #ddd; font-size: 10pt; }
         .summary-row:nth-child(even) { background: #f9f9f9; }
         .summary-row.total { font-weight: 700; border-top: 2px solid #1B5E20; background: #f0f7f0; color: #1B5E20; }
+
+        .print-section { margin-bottom: 12pt; }
+        .print-section-compact { page-break-inside: avoid; margin-bottom: 12pt; }
+
         @media print {
           .print-table th { background: #1B5E20 !important; color: white !important; }
+          .print-table thead { display: table-header-group; }
+          .print-table tfoot { display: table-footer-group; }
+          .print-table tr { page-break-inside: avoid; }
           .print-table tfoot td { background: #f0f7f0 !important; }
           .print-table tr:nth-child(even) td { background: #f9f9f9 !important; }
           .summary-row.total { background: #f0f7f0 !important; }
+          .page-break { page-break-before: always; }
+
+          .print-page {
+            padding-top: ${HEADER_CLEARANCE}px;
+            padding-bottom: ${FOOTER_CLEARANCE}px;
+          }
+          .print-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+          }
+          .print-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+          }
         }
       `}</style>
 
       <PrintHeader reportName={reportName} filters={filters} printedBy={printedBy} farmName={farmName} />
-      {children}
+      <div className="print-body">
+        {children}
+      </div>
       <PrintFooter />
     </div>
   );

@@ -17,7 +17,7 @@ const REPORT_CARDS = [
   { key:"farm",    title:"Farm Overview",    description:"Income, expenses & net profit summary",                   Icon:BarChart2,       color:"#1565C0", bg:"#E3F2FD",  href:"/reports/print?type=summary" },
   { key:"farmer",  title:"Farmer Report",    description:"Parcels, crops & harvest per farmer",                     Icon:User,            color:"#6A1B9A", bg:"#F3E5F5",  href:"/reports/print?type=ledger"  },
   { key:"worker",  title:"Worker Report",    description:"Attendance, earnings & payments",                         Icon:Clock,           color:"#E65100", bg:"#FFF3E0",  href:"/reports/print?type=summary" },
-  { key:"dealer",  title:"Dealer Report",    description:"Purchases, payments & outstanding balance",               Icon:Handshake,       color:"#00695C", bg:"#E0F2F1",  href:"/reports/print?type=expense" },
+  { key:"dealer",  title:"Dealer Report",    description:"Purchases, payments & outstanding balance",               Icon:Handshake,       color:"#00695C", bg:"#E0F2F1",  href:"/reports/print?type=dealer" },
   { key:"godown",  title:"Godown Report",    description:"Stock levels, value & transactions",                      Icon:Warehouse,       color:"#4E342E", bg:"#EFEBE9",  href:"/reports/print?type=godown"  },
   { key:"parcel",  title:"Parcel Report",    description:"Crop history, expenses & profitability",                  Icon:Map,             color:"#C62828", bg:"#FFEBEE",  href:"/reports/print?type=parcel"  },
 ];

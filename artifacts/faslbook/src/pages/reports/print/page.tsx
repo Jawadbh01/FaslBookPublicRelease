@@ -5,12 +5,14 @@ import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { ArrowLeft, Printer, Loader2, ChevronDown } from "lucide-react";
 
+import { PRINT_CSS } from "@/components/print/PrintLayout";
 import FarmerLedgerTemplate  from "./FarmerLedgerTemplate";
 import ParcelReportTemplate   from "./ParcelReportTemplate";
 import GodownReportTemplate   from "./GodownReportTemplate";
 import ExpenseReportTemplate  from "./ExpenseReportTemplate";
 import SalesReportTemplate    from "./SalesReportTemplate";
 import FarmSummaryTemplate    from "./FarmSummaryTemplate";
+import DealerReportTemplate   from "./DealerReportTemplate";
 
 // ── Label maps ────────────────────────────────────────────────
 const INCOME_LABELS: Record<string,string> = {
@@ -64,6 +66,7 @@ const REPORTS = [
   { key:"godown",  label:"Godown Register",      icon:"🏭", desc:"Warehouse inventory and stock movements" },
   { key:"expense", label:"Expense Report",       icon:"💸", desc:"Expenses grouped by month" },
   { key:"sales",   label:"Sales Report",         icon:"📈", desc:"Sales with payment status" },
+  { key:"dealer",  label:"Dealer Report",        icon:"🤝", desc:"Purchases, payments & outstanding balance" },
   { key:"summary", label:"Farm Summary",         icon:"🏡", desc:"One-page executive overview" },
 ];
 
@@ -93,8 +96,10 @@ export default function PrintHubPage() {
   // Selects
   const [farmers, setFarmers] = useState<any[]>([]);
   const [parcels, setParcels] = useState<any[]>([]);
+  const [dealersList, setDealersList] = useState<any[]>([]);
   const [selectedFarmer, setSelectedFarmer] = useState("");
   const [selectedParcel, setSelectedParcel] = useState("");
+  const [selectedDealer, setSelectedDealer] = useState("");
 
   // Date range — default: last 3 months
   const [dateFrom, setDateFrom] = useState(() => {
@@ -112,6 +117,7 @@ export default function PrintHubPage() {
   const [godownTxns,     setGodownTxns]     = useState<any[]>([]);
   const [allExpenses,    setAllExpenses]    = useState<any[]>([]);
   const [allSales,       setAllSales]       = useState<any[]>([]);
+  const [dealerTxns,     setDealerTxns]     = useState<any[]>([]);
   const [summaryData,    setSummaryData]    = useState<any>(null);
 
   // ── Load farmers & parcels once ───────────────────────────────
@@ -122,26 +128,28 @@ export default function PrintHubPage() {
     (async () => {
       setLoading(true);
       try {
-        const [workers, pls] = await Promise.all([
+        const [workers, pls, dls] = await Promise.all([
           getOrgDocs("workers", orgId),
           getOrgDocs("parcels", orgId),
+          getOrgDocs("dealers", orgId),
         ]);
         // Filter farmers client-side — no composite index needed
         const fl = workers.filter(w => w.workerType === "farmer");
         const pl = pls.map(d => ({ id: d.id, name: d.name || "Unnamed" }));
         setFarmers(fl);
         setParcels(pl);
+        setDealersList(dls);
         if (fl.length) setSelectedFarmer(fl[0].id);
         if (pl.length) setSelectedParcel(pl[0].id);
       } catch (err) {
-        console.error("PrintHub: failed to load farmers/parcels", err);
+        console.error("PrintHub: failed to load farmers/parcels/dealers", err);
       }
       setLoading(false);
     })();
   }, [orgId]);
 
   // Load data when report/filters change
-  useEffect(() => { if (orgId) loadData(); }, [activeReport, orgId, selectedFarmer, selectedParcel, dateFrom, dateTo]);
+  useEffect(() => { if (orgId) loadData(); }, [activeReport, orgId, selectedFarmer, selectedParcel, selectedDealer, dateFrom, dateTo]);
 
   async function loadData() {
     if (!orgId) return;
@@ -246,6 +254,30 @@ export default function PrintHubPage() {
           break;
         }
 
+        // ── Dealer Report — dealerTransactions, optionally per dealer ──
+        case "dealer": {
+          const all = await getOrgDocs("dealerTransactions", orgId);
+          const rows = all
+            .filter(t => !selectedDealer || t.dealerId === selectedDealer)
+            .map(t => {
+              const date = t.date ? (typeof t.date === "string" ? t.date : t.date.toDate?.()?.toISOString().split("T")[0] || "") : "";
+              return {
+                id: t.id, date,
+                dealerId: t.dealerId || "",
+                dealerName: t.dealerName || "",
+                type: t.type === "payment" ? "payment" : "purchase",
+                items: t.items || "",
+                paymentType: t.paymentType || "",
+                amount: Number(t.amount) || 0,
+                notes: t.notes || "",
+              };
+            })
+            .filter(e => (!dateFrom || !e.date || e.date >= dateFrom) && (!dateTo || !e.date || e.date <= dateTo))
+            .sort((a, b) => a.date.localeCompare(b.date));
+          setDealerTxns(rows);
+          break;
+        }
+
         // ── Farm Summary ──────────────────────────────────────────
         // Single-field queries only, filter workerType/type client-side
         case "summary": {
@@ -329,6 +361,12 @@ export default function PrintHubPage() {
         <SalesReportTemplate sales={allSales} farmName={orgName}
           printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
       );
+      if (activeReport==="dealer") return (
+        <DealerReportTemplate
+          dealer={selectedDealer ? (dealersList.find(d => d.id === selectedDealer) || null) : null}
+          dealers={dealersList} transactions={dealerTxns} farmName={orgName}
+          printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
+      );
       if (activeReport==="summary" && summaryData) return (
         <FarmSummaryTemplate farmName={orgName} printedBy={printedBy}
           farmerCount={summaryData.farmerCount} parcelCount={summaryData.parcelCount}
@@ -346,45 +384,12 @@ export default function PrintHubPage() {
 
   return (
     <>
-      {/* ── Global CSS ─── */}
-      <style>{`
-        /* ── Print: hide UI, show report ── */
-        @media print {
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          html, body { margin:0; padding:0; background:white; }
-          .no-print, nav, header, footer, .bottom-nav { display:none !important; }
-          .for-print { display:block !important; }
-          .print-table { width:100%; border-collapse:collapse; }
-          .print-table thead { display:table-header-group; }
-          .print-table tfoot { display:table-footer-group; }
-          .print-table tr { page-break-inside:avoid; }
-          .print-page { display:block !important; }
-          @page { size:A4 portrait; margin:18mm 15mm 22mm 15mm; }
-        }
-        /* ── Screen: hide the for-print div ── */
-        @media screen { .for-print { display:none !important; } }
-        .print-table { width:100%; border-collapse:collapse; font-family:'Times New Roman',Times,serif; }
-        .print-table th { background:#1B5E20; color:white; padding:5px 7px; text-align:left; font-size:9.5pt; font-weight:700; border:1px solid #155016; }
-        .print-table td { padding:4px 7px; border:1px solid #ddd; font-size:9.5pt; vertical-align:top; }
-        .print-table tr:nth-child(even) td { background:#f9f9f9; }
-        .print-table tfoot td { font-weight:700; border-top:2px solid #1B5E20; background:#f0f7f0; color:#1B5E20; }
-        .print-table .num { text-align:right; }
-        .print-table .ctr { text-align:center; }
-        .section-title { font-size:10.5pt; font-weight:700; color:#1B5E20; border-bottom:1px solid #ccc; padding-bottom:3px; margin:12px 0 6px 0; }
-        .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 20px; margin-bottom:10px; font-size:9.5pt; }
-        .info-grid .label { color:#555; }
-        .info-grid .value { font-weight:600; }
-        .summary-row { display:flex; justify-content:space-between; padding:5px 10px; border:1px solid #ddd; font-size:10pt; }
-        .summary-row:nth-child(even) { background:#f9f9f9; }
-        .summary-row.total { font-weight:700; border-top:2px solid #1B5E20; background:#f0f7f0; color:#1B5E20; }
-        .print-section { page-break-inside:avoid; margin-bottom:12pt; }
-        @media print {
-          .print-table th { background:#1B5E20 !important; color:white !important; }
-          .print-table tfoot td { background:#f0f7f0 !important; }
-          .print-table tr:nth-child(even) td { background:#f9f9f9 !important; }
-          .summary-row.total { background:#f0f7f0 !important; }
-        }
-      `}</style>
+      {/* ── Global CSS ───
+          NOTE: all report styling (tables, headers, footers, page breaks) lives
+          in PrintLayout.tsx — that is the single source of truth so every report
+          template renders identically. This block only toggles screen vs print
+          visibility of the two top-level containers below. */}
+      <style>{PRINT_CSS}</style>
 
       {/* ═══ SCREEN UI (hidden on print) ═══ */}
       <div className="no-print min-h-screen bg-gray-50 pb-24">
@@ -459,7 +464,17 @@ export default function PrintHubPage() {
               </div>
             )}
 
-            {["ledger","expense","sales","godown"].includes(activeReport) && (
+            {activeReport==="dealer" && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-gray-400 uppercase">Dealer</label>
+                <Select value={selectedDealer} onChange={setSelectedDealer} disabled={loading}>
+                  <option value="">All Dealers</option>
+                  {dealersList.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </Select>
+              </div>
+            )}
+
+            {["ledger","expense","sales","godown","dealer"].includes(activeReport) && (
               <div className="grid grid-cols-2 gap-3">
                 <DateInput label="From" value={dateFrom} onChange={setDateFrom} />
                 <DateInput label="To"   value={dateTo}   onChange={setDateTo} />

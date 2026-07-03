@@ -1,14 +1,18 @@
 import { useSyncStatus } from "@/lib/hooks/useSyncStatus";
 import { useEffect, useState, useRef } from "react";
 import { WifiOff, RefreshCw, CheckCircle2, Download, X } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
+import { downloadOfflineData } from "@/lib/offlineCache";
 
 export default function SyncIndicator({ iconColor = "#1B5E20" }: { iconColor?: string }) {
   const { state, syncNow } = useSyncStatus();
+  const { organization } = useAuthStore();
   const [pill, setPill]     = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [caching, setCaching]     = useState(false);
   const [cached, setCached]       = useState(false);
+  const [cacheError, setCacheError] = useState("");
   const setupDismissed = useRef(false);
   const prevState = useRef(state);
 
@@ -34,19 +38,20 @@ export default function SyncIndicator({ iconColor = "#1B5E20" }: { iconColor?: s
   }, [state]);
 
   const handleCacheNow = async () => {
+    if (!organization?.id) return;
     setCaching(true);
-    // Tell SW to cache the shell assets
+    setCacheError("");
     try {
-      const reg = await navigator.serviceWorker?.ready;
-      if (reg?.active) {
-        reg.active.postMessage("CACHE_SHELL");
-      }
-    } catch {}
-    // Give it 2s to cache
-    await new Promise((r) => setTimeout(r, 2000));
-    setCaching(false);
-    setCached(true);
-    setTimeout(() => { setShowSetup(false); setupDismissed.current = true; }, 2000);
+      // Downloads the org's Firestore data into the local cache (IndexedDB)
+      // and refreshes the cached app shell via the service worker.
+      await downloadOfflineData(organization.id);
+      setCached(true);
+      setTimeout(() => { setShowSetup(false); setupDismissed.current = true; }, 2000);
+    } catch {
+      setCacheError("Couldn't save offline copy. Try again.");
+    } finally {
+      setCaching(false);
+    }
   };
 
   return (
@@ -96,6 +101,9 @@ export default function SyncIndicator({ iconColor = "#1B5E20" }: { iconColor?: s
                 <X size={18} />
               </button>
             </div>
+            {cacheError && (
+              <p className="px-4 pb-1 -mt-1 text-red-600 text-[11px] font-medium">{cacheError}</p>
+            )}
             <div className="px-4 pb-4 pt-2 flex gap-2">
               <button onClick={handleCacheNow} disabled={caching || cached}
                 className="flex-1 py-2.5 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-70 active:scale-95 transition-transform"
