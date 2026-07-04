@@ -48,3 +48,10 @@ AuthProvider gates every non-PUBLIC route on `faslbook_user_cache`/`faslbook_org
 **Why:** Only the Google/Facebook flow in `login/page.tsx` originally saved this cache; email login, create-farm success, and join-request-approved (pending page) did not — each was a silent gap causing the reported "login redirect looping" bug.
 
 **How to apply:** Before any `window.location.replace/href` to `/overview` or another protected route, call the exported `saveCache(user, org, role)` from `AuthProvider.tsx` first. When adding new post-auth/post-onboarding redirect targets, grep for existing `saveCache` call sites and follow the same pattern.
+
+## Bottom-sheet modals must use `dvh` not `vh` for max-height on mobile
+Any modal with `max-h-[NNvh]` + a `shrink-0` sticky footer button (Save/Confirm) can render taller than the actually visible viewport on mobile Chrome, because `vh` is computed against the full layout viewport (including the dynamic browser toolbar), pushing the footer button off-screen with no way to scroll to it.
+
+**Why:** Confirmed root cause of a real "Save/Confirm button doesn't appear on mobile" bug in edit modals.
+
+**How to apply:** Use `max-h-[NNdvh]` (dynamic viewport height) instead of `max-h-[NNvh]` for any full-height/bottom-sheet modal container that has a sticky footer sibling. Tailwind's arbitrary-value bracket syntax supports `dvh` even without native config support.

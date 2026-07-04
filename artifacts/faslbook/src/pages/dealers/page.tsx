@@ -63,6 +63,7 @@ export default function DealersPage() {
   const [selectedDealer, setSelectedDealer] = useState<Dealer | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [editTxSaved, setEditTxSaved] = useState(false);
 
   const [dForm, setDForm] = useState({
     name: "", phone: "", address: "", notes: "",
@@ -283,7 +284,7 @@ export default function DealersPage() {
         syncStatus: "synced",
       });
 
-      setEditingTx(null);
+      setEditTxSaved(true);
     } catch (err) {
       console.error(err);
       setError("Failed to update transaction.");
@@ -731,23 +732,33 @@ export default function DealersPage() {
 
       {/* ── Edit Transaction Modal ─────────────────────────────── */}
       {editingTx && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => setEditingTx(null)}>
-          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setEditingTx(null); setEditTxSaved(false); }}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
           <div className="px-6 pt-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-800">
-                  Edit {editingTx.type === "purchase" ? "Purchase" : "Payment"}
+                  {editTxSaved ? "Saved" : `Edit ${editingTx.type === "purchase" ? "Purchase" : "Payment"}`}
                 </h2>
                 <p className="text-gray-400 text-xs">{editingTx.dealerName}</p>
               </div>
-              <button onClick={() => setEditingTx(null)}><X size={22} color="#9CA3AF" /></button>
+              <button onClick={() => { setEditingTx(null); setEditTxSaved(false); }}><X size={22} color="#9CA3AF" /></button>
             </div>
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-4">{error}</div>
             )}
 
+            {editTxSaved ? (
+              <div className="flex flex-col items-center text-center py-6">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: "#E8F5E9" }}>
+                  <Check size={36} color="#1B5E20" />
+                </div>
+                <p className="text-gray-800 font-bold text-base mb-1">Changes saved</p>
+                <p className="text-gray-400 text-sm">This {editingTx.type} has been updated.</p>
+              </div>
+            ) : (
+            <>
             {editingTx.type === "purchase" && (
               <div className="mb-4">
                 <label className="text-gray-600 text-sm font-medium mb-2 block">Items Purchased</label>
@@ -811,19 +822,31 @@ export default function DealersPage() {
                 className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base resize-none focus:border-green-700"
               />
             </div>
+            </>
+            )}
           </div>
 
           {/* Sticky footer — action button always stays fully visible, never gets
               squeezed or scrolled out of view inside the scrollable body above. */}
           <div className="shrink-0 px-6 pt-3 pb-6 border-t border-gray-100">
-            <button
-              onClick={handleSaveEditTx}
-              disabled={saving}
-              className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
-              style={{ backgroundColor: "#1B5E20" }}
-            >
-              {saving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
-            </button>
+            {editTxSaved ? (
+              <button
+                onClick={() => { setEditingTx(null); setEditTxSaved(false); }}
+                className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
+                style={{ backgroundColor: "#1B5E20" }}
+              >
+                Done
+              </button>
+            ) : (
+              <button
+                onClick={handleSaveEditTx}
+                disabled={saving}
+                className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+                style={{ backgroundColor: "#1B5E20" }}
+              >
+                {saving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
+              </button>
+            )}
           </div>
           </div>
         </div>

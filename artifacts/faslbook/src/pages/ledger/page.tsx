@@ -144,6 +144,7 @@ export default function LedgerPage() {
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState({ amount: "", date: "", notes: "" });
   const [editSaving, setEditSaving] = useState(false);
+  const [editSaved, setEditSaved] = useState(false);
 
   // ── Auto-open form from query param ───────────────────────
   useEffect(() => {
@@ -596,8 +597,8 @@ export default function LedgerPage() {
               editedAt: serverTimestamp(),
               editedBy: auth.currentUser?.uid || null,
             });
-            setDetailEntry(null);
             setEditMode(false);
+            setEditSaved(true);
           } catch (e) {
             console.error(e);
           } finally {
@@ -606,18 +607,26 @@ export default function LedgerPage() {
         };
 
         return (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setDetailEntry(null); setEditMode(false); }}>
-            <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setDetailEntry(null); setEditMode(false); setEditSaved(false); }}>
+            <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-6 overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <h2 className="text-lg font-bold text-gray-800">{editMode ? "Edit Entry" : `${cfg?.emoji || (isCredit ? "💰" : "📋")} ${label}`}</h2>
                   {(detailEntry as any).edited && !editMode && <p className="text-gray-400 text-xs italic">Edited</p>}
                 </div>
-                <button onClick={() => { setDetailEntry(null); setEditMode(false); }}><X size={22} color="#9CA3AF" /></button>
+                <button onClick={() => { setDetailEntry(null); setEditMode(false); setEditSaved(false); }}><X size={22} color="#9CA3AF" /></button>
               </div>
 
-              {!editMode ? (
+              {editSaved ? (
+                <div className="flex flex-col items-center text-center py-6">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: "#E8F5E9" }}>
+                    <CheckCircle size={36} color="#1B5E20" />
+                  </div>
+                  <p className="text-gray-800 font-bold text-base mb-1">Changes saved</p>
+                  <p className="text-gray-400 text-sm">This entry has been updated.</p>
+                </div>
+              ) : !editMode ? (
                 <>
                   <div className="space-y-3 mb-6">
                     <div className="flex justify-between items-center py-2 border-b border-gray-50">
@@ -699,7 +708,15 @@ export default function LedgerPage() {
             {/* Sticky footer — action button always stays fully visible, never gets
                 squeezed or scrolled out of view inside the scrollable body above. */}
             <div className="shrink-0 px-6 pt-3 pb-6 border-t border-gray-100">
-              {!editMode ? (
+              {editSaved ? (
+                <button
+                  onClick={() => { setDetailEntry(null); setEditMode(false); setEditSaved(false); }}
+                  className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
+                  style={{ backgroundColor: "#1B5E20" }}
+                >
+                  Done
+                </button>
+              ) : !editMode ? (
                 canEdit && (
                   <button
                     onClick={startEdit}

@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
-import { ChevronLeft, MapPin, Wheat, Package, BarChart2 } from "lucide-react";
+import { ChevronLeft, MapPin, Package, BarChart2, Receipt, TrendingUp, TrendingDown } from "lucide-react";
 
 interface FarmerUser {
   id: string;
@@ -58,6 +58,18 @@ interface InvTx {
   date: any;
 }
 
+interface LedgerEntry {
+  id: string;
+  type: "credit" | "debit";
+  category: string;
+  categoryLabel?: string;
+  amount: number;
+  date: string;
+  parcelId?: string;
+  parcelName?: string;
+  notes?: string;
+}
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 const statusBg: Record<string, { bg: string; color: string; label: string }> = {
@@ -77,6 +89,7 @@ export default function FarmerDetailPage() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
   const [invTxs, setInvTxs] = useState<InvTx[]>([]);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -122,8 +135,33 @@ export default function FarmerDetailPage() {
     return () => unsubs.forEach((u) => u());
   }, [id, orgId]);
 
+  // Ledger entries have no direct farmer link — they're tied to parcels via
+  // parcelId, so once we know which parcels are assigned to this farmer we
+  // pull the ledger entries recorded against those parcels.
+  useEffect(() => {
+    if (!orgId || parcels.length === 0) {
+      setLedgerEntries([]);
+      return;
+    }
+    const parcelIds = parcels.map((p) => p.id).slice(0, 30);
+    const unsub = onSnapshot(
+      query(
+        collection(db, "ledgerEntries"),
+        where("organizationId", "==", orgId),
+        where("parcelId", "in", parcelIds)
+      ),
+      (snap) => setLedgerEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry)))
+    );
+    return () => unsub();
+  }, [orgId, parcels]);
+
   const activeCrops = crops.filter((c) => c.status !== "harvested" && c.status !== "closed");
   const harvestedCrops = crops.filter((c) => c.status === "harvested");
+
+  const sortedLedger = [...ledgerEntries].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const totalCredit = ledgerEntries.filter((e) => e.type === "credit").reduce((s, e) => s + (e.amount || 0), 0);
+  const totalDebit = ledgerEntries.filter((e) => e.type === "debit").reduce((s, e) => s + (e.amount || 0), 0);
+  const fmtRs = (n: number) => "Rs. " + n.toLocaleString("en-PK");
 
   const ini = farmer?.displayName?.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
 
@@ -172,7 +210,7 @@ export default function FarmerDetailPage() {
             {farmer.email && <p className="text-green-100 text-sm">✉️ {farmer.email}</p>}
             {farmer.phone && <p className="text-green-100 text-sm">📞 {farmer.phone}</p>}
             <p className="text-green-200 text-xs mt-0.5">
-              {parcels.length} parcel{parcels.length !== 1 ? "s" : ""} · {activeCrops.length} active crop{activeCrops.length !== 1 ? "s" : ""}
+              {parcels.length} parcel{parcels.length !== 1 ? "s" : ""} · {ledgerEntries.length} ledger entr{ledgerEntries.length !== 1 ? "ies" : "y"}
             </p>
           </div>
         </div>
@@ -199,35 +237,47 @@ export default function FarmerDetailPage() {
           )}
         </div>
 
-        {/* Active Crops */}
+        {/* Ledger */}
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
-            <Wheat size={16} color="#16A34A" />
-            <p className="font-bold text-gray-800">Active Crops</p>
-            {activeCrops.length > 0 && (
-              <span className="ml-auto px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: "#E8F5E9", color: "#1B5E20" }}>
-                {activeCrops.length}
-              </span>
-            )}
+            <Receipt size={16} color="#1B5E20" />
+            <p className="font-bold text-gray-800">Ledger</p>
           </div>
-          {activeCrops.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-3">No active crops</p>
+
+          {ledgerEntries.length > 0 && (
+            <div className="flex gap-3 mb-3">
+              <div className="flex-1 rounded-xl p-3" style={{ backgroundColor: "#E8F5E9" }}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <TrendingUp size={14} color="#1B5E20" />
+                  <p className="text-xs font-medium" style={{ color: "#1B5E20" }}>Income</p>
+                </div>
+                <p className="font-bold text-sm" style={{ color: "#1B5E20" }}>{fmtRs(totalCredit)}</p>
+              </div>
+              <div className="flex-1 rounded-xl p-3" style={{ backgroundColor: "#FFEBEE" }}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <TrendingDown size={14} color="#C62828" />
+                  <p className="text-xs font-medium" style={{ color: "#C62828" }}>Expense</p>
+                </div>
+                <p className="font-bold text-sm" style={{ color: "#C62828" }}>{fmtRs(totalDebit)}</p>
+              </div>
+            </div>
+          )}
+
+          {sortedLedger.length === 0 ? (
+            <p className="text-gray-400 text-sm text-center py-3">No ledger entries for this farmer's parcels yet</p>
           ) : (
             <div className="flex flex-col gap-2">
-              {activeCrops.map((c) => {
-                const s = statusBg[c.status] || statusBg.planned;
-                return (
-                  <div key={c.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                    <div>
-                      <p className="text-gray-800 font-medium text-sm">{c.cropName}</p>
-                      {c.parcelName && <p className="text-gray-400 text-xs">{c.parcelName}</p>}
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-xs font-bold" style={{ backgroundColor: s.bg, color: s.color }}>
-                      {s.label}
-                    </span>
+              {sortedLedger.slice(0, 10).map((e) => (
+                <div key={e.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                  <div>
+                    <p className="text-gray-800 font-medium text-sm">{e.categoryLabel || e.category}</p>
+                    <p className="text-gray-400 text-xs">{e.parcelName || "—"} · {e.date}</p>
                   </div>
-                );
-              })}
+                  <p className="font-semibold text-sm" style={{ color: e.type === "credit" ? "#1B5E20" : "#C62828" }}>
+                    {e.type === "credit" ? "+" : "-"}{fmtRs(e.amount)}
+                  </p>
+                </div>
+              ))}
             </div>
           )}
         </div>
