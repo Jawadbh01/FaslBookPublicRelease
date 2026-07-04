@@ -13,6 +13,7 @@ import ExpenseReportTemplate  from "./ExpenseReportTemplate";
 import SalesReportTemplate    from "./SalesReportTemplate";
 import FarmSummaryTemplate    from "./FarmSummaryTemplate";
 import DealerReportTemplate   from "./DealerReportTemplate";
+import WorkersReportTemplate  from "./WorkersReportTemplate";
 
 // ── Label maps ────────────────────────────────────────────────
 const INCOME_LABELS: Record<string,string> = {
@@ -67,6 +68,7 @@ const REPORTS = [
   { key:"expense", label:"Expense Report",       icon:"💸", desc:"Expenses grouped by month" },
   { key:"sales",   label:"Sales Report",         icon:"📈", desc:"Sales with payment status" },
   { key:"dealer",  label:"Dealer Report",        icon:"🤝", desc:"Purchases, payments & outstanding balance" },
+  { key:"workers", label:"Workers Report",       icon:"👷", desc:"Attendance and wages for daily/monthly staff" },
   { key:"summary", label:"Farm Summary",         icon:"🏡", desc:"One-page executive overview" },
 ];
 
@@ -119,6 +121,8 @@ export default function PrintHubPage() {
   const [allSales,       setAllSales]       = useState<any[]>([]);
   const [dealerTxns,     setDealerTxns]     = useState<any[]>([]);
   const [summaryData,    setSummaryData]    = useState<any>(null);
+  const [reportWorkers,  setReportWorkers]  = useState<any[]>([]);
+  const [reportAttendance, setReportAttendance] = useState<any[]>([]);
 
   // ── Load farmers & parcels once ───────────────────────────────
   // NOTE: uses single-field query only (no workerType compound) to avoid
@@ -279,6 +283,27 @@ export default function PrintHubPage() {
           break;
         }
 
+        // ── Workers Report — staff list + attendance in date range ─
+        case "workers": {
+          const [allWorkers, allAttendance] = await Promise.all([
+            getOrgDocs("workers", orgId),
+            getOrgDocs("attendance", orgId),
+          ]);
+          const staff = allWorkers
+            .filter((w: any) => w.workerType === "daily" || w.workerType === "monthly")
+            .map((w: any) => ({
+              id: w.id, name: w.name || "Unnamed", phone: w.phone || "",
+              workerType: w.workerType, dailyRate: Number(w.dailyRate) || 0,
+              monthlySalary: Number(w.monthlySalary) || 0,
+            }));
+          const attRows = allAttendance
+            .map((a: any) => ({ workerId: a.workerId || "", date: a.date || "", status: a.status }))
+            .filter((a: any) => (!dateFrom || !a.date || a.date >= dateFrom) && (!dateTo || !a.date || a.date <= dateTo));
+          setReportWorkers(staff);
+          setReportAttendance(attRows);
+          break;
+        }
+
         // ── Farm Summary ──────────────────────────────────────────
         // Single-field queries only, filter workerType/type client-side
         case "summary": {
@@ -366,6 +391,10 @@ export default function PrintHubPage() {
         <DealerReportTemplate
           dealer={selectedDealer ? (dealersList.find(d => d.id === selectedDealer) || null) : null}
           dealers={dealersList} transactions={dealerTxns} farmName={orgName}
+          printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
+      );
+      if (activeReport==="workers") return (
+        <WorkersReportTemplate workers={reportWorkers} attendance={reportAttendance} farmName={orgName}
           printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
       );
       if (activeReport==="summary" && summaryData) return (

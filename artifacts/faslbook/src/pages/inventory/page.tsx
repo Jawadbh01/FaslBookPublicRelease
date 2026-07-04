@@ -200,6 +200,7 @@ export default function GodownPage() {
         itemId: selected.id, itemName: selected.name, unit: selected.unit,
         quantity: Number(txForm.quantity), farmerId: txForm.farmerId,
         farmerName: farmer?.name || "", organizationId: orgId!, notes: txForm.notes,
+        pricePerUnit: selected.pricePerUnit || 0,
       });
       setSuccessMsg({ title: "Transfer Done! 📦", sub: `${txForm.quantity} ${selected.unit} → ${farmer?.name}` });
       setSuccess(true);

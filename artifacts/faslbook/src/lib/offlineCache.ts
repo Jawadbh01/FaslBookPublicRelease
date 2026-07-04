@@ -88,14 +88,24 @@ export async function downloadOfflineData(
   let documents = 0;
   let done = 0;
 
+  // Guard every fetch with a timeout — a flaky connection (e.g. captive portal,
+  // navigator.onLine=true but no real connectivity) would otherwise leave
+  // getDocs() pending forever and the "Downloading…" UI stuck indefinitely.
+  const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+    Promise.race([
+      p,
+      new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+    ]);
+
   for (const collectionName of ORG_COLLECTIONS) {
     try {
-      const snap = await getDocs(
-        query(collection(db, collectionName), where("organizationId", "==", orgId))
+      const snap = await withTimeout(
+        getDocs(query(collection(db, collectionName), where("organizationId", "==", orgId))),
+        15000
       );
       documents += snap.size;
     } catch (err) {
-      // Keep going — one missing/empty collection shouldn't abort the whole download.
+      // Keep going — one missing/empty/timed-out collection shouldn't abort the whole download.
       console.warn(`Offline cache: failed to fetch "${collectionName}"`, err);
     }
     done += 1;

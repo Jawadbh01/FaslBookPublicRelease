@@ -13,6 +13,7 @@ interface FarmerTransferInput {
   farmerName: string;
   organizationId: string;
   notes: string;
+  pricePerUnit?: number;
 }
 
 export async function runFarmerTransferWorkflow(input: FarmerTransferInput) {
@@ -74,13 +75,20 @@ export async function runFarmerTransferWorkflow(input: FarmerTransferInput) {
   }
 
   // ── 4. Ledger entry ────────────────────────────────────────
+  const amount = Math.round((input.pricePerUnit || 0) * input.quantity);
   const ledgerRef = doc(collection(db, "ledgerEntries"));
   batch.set(ledgerRef, {
     id: ledgerRef.id,
     organizationId: input.organizationId,
-    type: "stockTransfer",
+    type: "debit",
+    category: "stockTransfer",
+    categoryLabel: "Godown Transfer",
     direction: "debit",
-    amount: 0,
+    amount,
+    date: new Date().toISOString().split("T")[0],
+    farmerId: input.farmerId,
+    farmerName: input.farmerName,
+    notes: `Transferred ${input.quantity} ${input.unit} of ${input.itemName} to ${input.farmerName}`,
     description: `Transferred ${input.quantity} ${input.unit} of ${input.itemName} to ${input.farmerName}`,
     sourceId: txRef.id,
     sourceType: "inventoryTransaction",

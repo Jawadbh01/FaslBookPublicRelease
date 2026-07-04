@@ -27,6 +27,16 @@ export function formatLastSynced(ts: number | null): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+// Guard against navigator.onLine=true but no real connectivity (captive
+// portal, flaky network) leaving the UI stuck on "syncing" forever.
+const SYNC_TIMEOUT_MS = 15000;
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("sync-timeout")), ms)),
+  ]);
+}
+
 export function useSyncStatus() {
   const [state, setState]         = useState<SyncState>(navigator.onLine ? "online" : "offline");
   const [lastSynced, setLastSynced] = useState<number | null>(loadLastSynced);
@@ -49,9 +59,13 @@ export function useSyncStatus() {
       try {
         syncingRef.current = true;
         setState("syncing");
-        await waitForPendingWrites(db);
+        await withTimeout(waitForPendingWrites(db), SYNC_TIMEOUT_MS);
         markSynced();
-      } catch { /* offline */ }
+      } catch {
+        // Timed out or genuinely offline — don't leave the UI stuck spinning.
+        syncingRef.current = false;
+        setState(navigator.onLine ? "online" : "offline");
+      }
     };
 
     const handleOnline = async () => {
@@ -95,7 +109,7 @@ export function useSyncStatus() {
     try {
       await disableNetwork(db);
       await enableNetwork(db);
-      await waitForPendingWrites(db);
+      await withTimeout(waitForPendingWrites(db), SYNC_TIMEOUT_MS);
       const now = Date.now();
       saveLastSynced();
       setLastSynced(now);

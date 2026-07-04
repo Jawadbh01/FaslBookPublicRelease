@@ -353,6 +353,12 @@ export default function WorkersPage() {
                             </div>
                           )}
                         </div>
+                        <button
+                          onClick={() => window.location.href = `/workers/farmer/${farmer.id}`}
+                          className="mt-3 w-full flex items-center justify-center gap-1 py-2 rounded-xl text-xs font-semibold"
+                          style={{ backgroundColor: "#F5F5F5", color: "#616161" }}>
+                          View Profile <ChevronRight size={13} />
+                        </button>
                       </div>
                     );
                   })}

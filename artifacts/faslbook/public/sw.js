@@ -1,11 +1,14 @@
-// FaslBook Service Worker v6 — Offline-first with permanent asset cache
+// FaslBook Service Worker v7 — Offline-first with permanent asset cache
 // KEY DESIGN:
 //  - faslbook-assets: permanent, never deleted, accumulates all JS/CSS/images
 //  - faslbook-shell:  just index.html + icons — cleared on new deploy to stay fresh
 //  - Firebase URLs:   always pass through (Firebase has its own IndexedDB offline layer)
 //  - Navigation:      serve cached index.html so React handles all routing
+//  - Updates:         the page actively checks for a new SW (see index.html) and
+//                      reloads once the new one takes control, so users never get
+//                      stuck viewing a stale build.
 
-const SHELL_CACHE  = "faslbook-shell-v6";
+const SHELL_CACHE  = "faslbook-shell-v7";
 const ASSET_CACHE  = "faslbook-assets";        // No version — never wiped
 
 const FIREBASE_HOSTS = [

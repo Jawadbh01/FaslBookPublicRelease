@@ -31,3 +31,13 @@ description: Key decisions for FaslBook farm OS — auth model, data model, colo
 - If storage/unauthorized: user must set Firebase Console rules: allow read, write: if request.auth != null;
 
 **Why:** These are non-obvious decisions about who can log in vs. who is a data record — easy to get wrong if not documented.
+
+## Ignore duplicate/orphaned workflows
+`.migration-backup/artifacts/*` and the standalone `FaslBook` workflow are stale duplicates (missing node_modules, port conflicts) and will always show failed — that's expected. Only `artifacts/faslbook: web` is the real active app; check that one when verifying whether the app works.
+
+## Firestore sync/offline status can hang indefinitely without timeouts
+`navigator.onLine === true` does not guarantee real connectivity (captive portals, flaky networks). Firestore calls like `waitForPendingWrites()` and `getDocs()` have no built-in timeout, so any UI state driven by `await`-ing them (e.g. a "syncing"/"downloading" spinner) can get stuck forever if the network is degraded but reports as online.
+
+**Why:** This caused a real "offline mode stuck loading" bug — the download/sync flow assumed these calls would always resolve or reject promptly.
+
+**How to apply:** Wrap any user-facing Firestore operation that gates a loading/syncing UI state in a `Promise.race` with an explicit timeout (~15s), and make sure the timeout path resets the UI state back to a sane value (`online`/`offline`) rather than leaving it stuck.
