@@ -4,7 +4,15 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 
-const PUBLIC = ["/login", "/email", "/register", "/create-farm", "/role-select", "/join-farm", "/pending"];
+// Pages a fully-onboarded, cached user should be bounced away from straight to /overview.
+const AUTH_PAGES = ["/login", "/email", "/register"];
+// Pages that are part of the signup/onboarding flow. A cached user can legitimately be
+// sitting here (e.g. they were just sent here because their account is missing an
+// organization/role). We must NOT blindly bounce them back to /overview on cache alone —
+// only the Firebase background check (Step 3) should decide that, otherwise a user stuck
+// mid-onboarding gets redirect-looped: /overview -> /create-farm -> /overview -> ...
+const ONBOARDING_PAGES = ["/create-farm", "/role-select", "/join-farm", "/pending"];
+const PUBLIC = [...AUTH_PAGES, ...ONBOARDING_PAGES];
 const USER_KEY = "faslbook_user_cache";
 const ORG_KEY  = "faslbook_org_cache";
 
@@ -50,13 +58,16 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       if (cachedOrg) setOrganization(cachedOrg);
       setLoading(false);
 
-      if (PUBLIC.some((p) => path === p || path.startsWith(p + "/"))) {
-        // On a login/auth page but already signed in → go to app
+      if (AUTH_PAGES.some((p) => path === p || path.startsWith(p + "/"))) {
+        // On a pure login/auth page but already signed in → go to app
         setReady(true);
         window.location.replace("/overview");
         return; // Skip Firebase background check — redirect is enough
       }
-      // On a protected page → show content immediately, check Firebase in background
+      // On a protected page (including onboarding pages) → show content immediately,
+      // and always let the Firebase background check (Step 3) decide where to go next.
+      // Onboarding pages must NOT be blindly bounced away just because a cache exists —
+      // that caused an /overview <-> /create-farm redirect loop.
       setReady(true);
     } else if (PUBLIC.some((p) => path === p || path.startsWith(p + "/"))) {
       // No cache, on a public page → let it render normally

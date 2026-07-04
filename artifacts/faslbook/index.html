@@ -34,43 +34,5 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
-            .then(function(reg) {
-              // Check for a new SW version on every load, and whenever the
-              // tab regains focus, so users don't get stuck on stale builds.
-              reg.update().catch(function() {});
-              document.addEventListener('visibilitychange', function() {
-                if (document.visibilityState === 'visible') reg.update().catch(function() {});
-              });
-
-              let reloaded = false;
-              function activateNewWorker(worker) {
-                worker.addEventListener('statechange', function() {
-                  if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // New version installed and waiting — activate it immediately.
-                    worker.postMessage('SKIP_WAITING');
-                  }
-                });
-              }
-              if (reg.waiting) reg.waiting.postMessage('SKIP_WAITING');
-              if (reg.installing) activateNewWorker(reg.installing);
-              reg.addEventListener('updatefound', function() {
-                if (reg.installing) activateNewWorker(reg.installing);
-              });
-
-              // When the new SW takes control, reload once to pick up fresh assets.
-              navigator.serviceWorker.addEventListener('controllerchange', function() {
-                if (reloaded) return;
-                reloaded = true;
-                window.location.reload();
-              });
-            })
-            .catch(function(err) { console.log('SW registration failed:', err); });
-        });
-      }
-    </script>
   </body>
 </html>

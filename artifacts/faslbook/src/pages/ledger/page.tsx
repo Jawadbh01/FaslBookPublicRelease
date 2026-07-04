@@ -607,7 +607,8 @@ export default function LedgerPage() {
 
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setDetailEntry(null); setEditMode(false); }}>
-            <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 pt-6 overflow-y-auto">
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <h2 className="text-lg font-bold text-gray-800">{editMode ? "Edit Entry" : `${cfg?.emoji || (isCredit ? "💰" : "📋")} ${label}`}</h2>
@@ -661,16 +662,6 @@ export default function LedgerPage() {
                       <Receipt size={16} /> View Receipt
                     </button>
                   )}
-
-                  {canEdit && (
-                    <button
-                      onClick={startEdit}
-                      className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
-                      style={{ backgroundColor: "#1B5E20" }}
-                    >
-                      Edit Entry
-                    </button>
-                  )}
                 </>
               ) : (
                 <>
@@ -692,7 +683,7 @@ export default function LedgerPage() {
                       className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700"
                     />
                   </div>
-                  <div className="mb-6">
+                  <div className="mb-2">
                     <label className="text-gray-600 text-sm font-medium mb-2 block">Notes</label>
                     <textarea
                       value={editForm.notes}
@@ -701,15 +692,32 @@ export default function LedgerPage() {
                       className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base resize-none focus:border-green-700"
                     />
                   </div>
+                </>
+              )}
+            </div>
+
+            {/* Sticky footer — action button always stays fully visible, never gets
+                squeezed or scrolled out of view inside the scrollable body above. */}
+            <div className="shrink-0 px-6 pt-3 pb-6 border-t border-gray-100">
+              {!editMode ? (
+                canEdit && (
                   <button
-                    onClick={saveEdit}
-                    disabled={editSaving}
-                    className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+                    onClick={startEdit}
+                    className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
                     style={{ backgroundColor: "#1B5E20" }}
                   >
-                    {editSaving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
+                    Edit Entry
                   </button>
-                </>
+                )
+              ) : (
+                <button
+                  onClick={saveEdit}
+                  disabled={editSaving}
+                  className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+                  style={{ backgroundColor: "#1B5E20" }}
+                >
+                  {editSaving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
+                </button>
               )}
             </div>
           </div>

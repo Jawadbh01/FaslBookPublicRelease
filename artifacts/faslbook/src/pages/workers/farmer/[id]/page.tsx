@@ -21,6 +21,15 @@ interface FarmerUser {
   organizationId: string;
 }
 
+interface WorkerFarmerDoc {
+  id: string;
+  name?: string;
+  phone?: string;
+  notes?: string;
+  assignedParcel?: string;
+  organizationId?: string;
+}
+
 interface Parcel {
   id: string;
   name: string;
@@ -72,8 +81,21 @@ export default function FarmerDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    getDoc(doc(db, "users", id)).then((snap) => {
-      if (snap.exists()) setFarmer({ id: snap.id, ...snap.data() } as FarmerUser);
+    // Farmers are manual records in the `workers` collection (workerType: "farmer"),
+    // not authenticated `users` — farmers cannot log in. Looking them up in `users`
+    // always returned "not found".
+    getDoc(doc(db, "workers", id)).then((snap) => {
+      if (snap.exists()) {
+        const w = snap.data() as WorkerFarmerDoc;
+        setFarmer({
+          id: snap.id,
+          displayName: w.name || "Unnamed",
+          email: "",
+          phone: w.phone || "",
+          role: "farmer",
+          organizationId: w.organizationId || "",
+        });
+      }
       setLoading(false);
     });
   }, [id]);

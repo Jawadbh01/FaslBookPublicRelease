@@ -732,7 +732,8 @@ export default function DealersPage() {
       {/* ── Edit Transaction Modal ─────────────────────────────── */}
       {editingTx && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => setEditingTx(null)}>
-          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-6 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="px-6 pt-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-800">
@@ -801,7 +802,7 @@ export default function DealersPage() {
               />
             </div>
 
-            <div className="mb-6">
+            <div className="mb-2">
               <label className="text-gray-600 text-sm font-medium mb-2 block">Notes</label>
               <textarea
                 value={editForm.notes}
@@ -810,7 +811,11 @@ export default function DealersPage() {
                 className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base resize-none focus:border-green-700"
               />
             </div>
+          </div>
 
+          {/* Sticky footer — action button always stays fully visible, never gets
+              squeezed or scrolled out of view inside the scrollable body above. */}
+          <div className="shrink-0 px-6 pt-3 pb-6 border-t border-gray-100">
             <button
               onClick={handleSaveEditTx}
               disabled={saving}
@@ -819,6 +824,7 @@ export default function DealersPage() {
             >
               {saving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
             </button>
+          </div>
           </div>
         </div>
       )}
