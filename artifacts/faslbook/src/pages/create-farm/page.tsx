@@ -163,7 +163,7 @@ export default function CreateFarmPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-full bg-white flex flex-col">
       {/* Header */}
       <div
         className="px-4 pt-12 pb-8"

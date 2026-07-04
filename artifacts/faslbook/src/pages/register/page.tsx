@@ -105,7 +105,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-full bg-white flex flex-col">
       {/* Header */}
       <div className="flex items-center px-4 pt-12 pb-6" style={{ backgroundColor: config.color }}>
         <button onClick={() => window.history.back()} className="text-white mr-3">

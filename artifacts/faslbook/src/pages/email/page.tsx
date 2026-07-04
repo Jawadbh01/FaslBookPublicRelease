@@ -74,7 +74,7 @@ export default function EmailLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-full bg-white flex flex-col">
       <div
         className="flex items-center px-4 pt-12 pb-6"
         style={{ backgroundColor: "#1B5E20" }}
@@ -91,7 +91,7 @@ export default function EmailLoginPage() {
         </div>
       </div>
 
-      <div className="flex-1 px-6 pt-8 pb-10">
+      <div className="flex-1 px-6 pt-8 pb-10 overflow-y-auto">
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-6">
             {error}

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   GoogleAuthProvider,
   FacebookAuthProvider,
 } from "firebase/auth";
@@ -72,11 +71,43 @@ async function handleUserAfterAuth(
   window.location.replace("/overview");
 }
 
+// Turns a raw Firebase error into a specific, actionable message instead of a
+// generic "Login failed" — this is what lets us tell *why* the popup didn't
+// work (blocked domain, popup blocked by browser, provider disabled, etc.)
+// instead of guessing.
+function describeAuthError(err: any): string {
+  const code = err?.code || "";
+  const domain = typeof window !== "undefined" ? window.location.hostname : "";
+  console.error("[FaslBook auth error]", code, err?.message, err);
+
+  switch (code) {
+    case "auth/unauthorized-domain":
+      return `This domain (${domain}) isn't authorized for sign-in yet. In the Firebase Console, go to Authentication → Settings → Authorized domains and add "${domain}".`;
+    case "auth/operation-not-allowed":
+      return "This sign-in method is disabled in Firebase. In the Firebase Console, go to Authentication → Sign-in method and enable Google/Facebook.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the sign-in popup. Allow popups for this site and try again.";
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+      return "Sign-in window was closed before finishing. Please try again.";
+    case "auth/account-exists-with-different-credential":
+      return "An account already exists with this email using a different sign-in method.";
+    case "auth/network-request-failed":
+      return "Network error — check your internet connection and try again.";
+    case "auth/internal-error":
+      return "Firebase rejected the sign-in request. This usually means Google/Facebook sign-in isn't fully configured for this project yet.";
+    case "":
+      if (err?.message === "FARMER_NO_ACCESS") {
+        return "Farmers don't have a separate login. Contact your farm Landlord or Manager.";
+      }
+      return `Login failed: ${err?.message || "unknown error"}`;
+    default:
+      return `Login failed (${code}). Please try again.`;
+  }
+}
+
 export default function LoginPage() {
-  // Start true — we check for a pending redirect-sign-in result before showing
-  // the login form, so the buttons don't flash if we're returning from Google/
-  // Facebook mid-auth.
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
 
   useEffect(() => {
@@ -84,40 +115,16 @@ export default function LoginPage() {
     if (params.get("farmer") === "1") {
       setError("Farmers don't have a separate login. Your account is managed by your farm's Landlord or Manager.");
     }
-
-    // signInWithRedirect (used below) hands control back to the app via a full
-    // page reload after the provider redirects back — getRedirectResult picks
-    // up that pending sign-in here. Popups (signInWithPopup) are unreliable
-    // inside installed PWAs / in-app webviews, which is why we use redirect.
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result && result.user) {
-          return handleUserAfterAuth(
-            result.user.uid, result.user.displayName, result.user.email, result.user.photoURL
-          );
-        }
-        setLoading(false);
-        return undefined;
-      })
-      .catch((err: any) => {
-        setLoading(false);
-        if (err.message === "FARMER_NO_ACCESS") {
-          setError("Farmers don't have a separate login. Contact your farm Landlord or Manager.");
-        } else if (err.code === "auth/account-exists-with-different-credential") {
-          setError("An account already exists with this email using a different sign-in method.");
-        } else if (err.code) {
-          setError("Login failed. Please try again.");
-        }
-      });
   }, []);
 
   const doAuth = async (providerFn: () => Promise<any>) => {
     try {
       setLoading(true); setError("");
-      await providerFn(); // signInWithRedirect navigates away — nothing runs after this
+      const result = await providerFn();
+      await handleUserAfterAuth(result.user.uid, result.user.displayName, result.user.email, result.user.photoURL);
     } catch (err: any) {
       setLoading(false);
-      setError("Login failed. Please try again.");
+      setError(describeAuthError(err));
     }
   };
 
@@ -147,7 +154,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col overflow-y-auto">
+    <div className="h-full bg-white flex flex-col overflow-y-auto">
       {/* Banner */}
       <div
         className="relative flex items-center px-5 overflow-hidden shrink-0"
@@ -185,14 +192,14 @@ export default function LoginPage() {
         </p>
 
         <div className="flex flex-col gap-3">
-          <button onClick={() => doAuth(() => { const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account" }); return signInWithRedirect(auth, p); })}
+          <button onClick={() => doAuth(() => { const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account" }); return signInWithPopup(auth, p); })}
             className="flex items-center gap-3 w-full bg-white border border-gray-200 rounded-2xl px-4 py-3.5 shadow-sm active:scale-95 transition-transform"
             style={{ WebkitTapHighlightColor: "transparent" }}>
             <div className="bg-red-50 rounded-full p-2 shrink-0"><Chrome size={20} color="#EA4335" /></div>
             <span className="text-gray-800 font-semibold text-[15px]">Continue with Google</span>
           </button>
 
-          <button onClick={() => doAuth(() => signInWithRedirect(auth, new FacebookAuthProvider()))}
+          <button onClick={() => doAuth(() => signInWithPopup(auth, new FacebookAuthProvider()))}
             className="flex items-center gap-3 w-full bg-blue-600 rounded-2xl px-4 py-3.5 active:scale-95 transition-transform"
             style={{ WebkitTapHighlightColor: "transparent" }}>
             <div className="bg-blue-500 rounded-full p-2 shrink-0">

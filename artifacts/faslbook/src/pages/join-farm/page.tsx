@@ -147,7 +147,7 @@ export default function JoinFarmPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-full bg-white flex flex-col">
       {/* Header */}
       <div
         className="px-4 pt-12 pb-8"
@@ -174,7 +174,7 @@ export default function JoinFarmPage() {
         </div>
       </div>
 
-      <div className="flex-1 px-6 pt-8 pb-10">
+      <div className="flex-1 px-6 pt-8 pb-10 overflow-y-auto">
 
         {/* Farm ID Input */}
         <div className="mb-2">

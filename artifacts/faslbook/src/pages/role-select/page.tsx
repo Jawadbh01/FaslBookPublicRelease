@@ -53,7 +53,7 @@ export default function RoleSelectPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-full bg-white flex flex-col">
       <div className="px-4 pt-12 pb-8" style={{ backgroundColor: "#1B5E20" }}>
         <button onClick={() => window.history.back()} className="text-white mb-4 block">
           <ArrowLeft size={24} />
@@ -73,7 +73,7 @@ export default function RoleSelectPage() {
         </div>
       </div>
 
-      <div className="flex-1 px-6 pt-8 pb-10">
+      <div className="flex-1 px-6 pt-8 pb-10 overflow-y-auto">
         <p className="text-gray-500 text-sm text-center mb-8">
           {isGoogleUser
             ? "Choose your role on this farm."
