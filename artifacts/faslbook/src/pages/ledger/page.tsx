@@ -721,6 +721,7 @@ export default function LedgerPage() {
               )}
             </div>
           </div>
+          </div>
         );
       })()}
 
