@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import {
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   FacebookAuthProvider,
 } from "firebase/auth";
@@ -72,7 +73,10 @@ async function handleUserAfterAuth(
 }
 
 export default function LoginPage() {
-  const [loading, setLoading] = useState(false);
+  // Start true — we check for a pending redirect-sign-in result before showing
+  // the login form, so the buttons don't flash if we're returning from Google/
+  // Facebook mid-auth.
+  const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState("");
 
   useEffect(() => {
@@ -80,24 +84,40 @@ export default function LoginPage() {
     if (params.get("farmer") === "1") {
       setError("Farmers don't have a separate login. Your account is managed by your farm's Landlord or Manager.");
     }
+
+    // signInWithRedirect (used below) hands control back to the app via a full
+    // page reload after the provider redirects back — getRedirectResult picks
+    // up that pending sign-in here. Popups (signInWithPopup) are unreliable
+    // inside installed PWAs / in-app webviews, which is why we use redirect.
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result && result.user) {
+          return handleUserAfterAuth(
+            result.user.uid, result.user.displayName, result.user.email, result.user.photoURL
+          );
+        }
+        setLoading(false);
+        return undefined;
+      })
+      .catch((err: any) => {
+        setLoading(false);
+        if (err.message === "FARMER_NO_ACCESS") {
+          setError("Farmers don't have a separate login. Contact your farm Landlord or Manager.");
+        } else if (err.code === "auth/account-exists-with-different-credential") {
+          setError("An account already exists with this email using a different sign-in method.");
+        } else if (err.code) {
+          setError("Login failed. Please try again.");
+        }
+      });
   }, []);
 
   const doAuth = async (providerFn: () => Promise<any>) => {
     try {
       setLoading(true); setError("");
-      const result = await providerFn();
-      await handleUserAfterAuth(result.user.uid, result.user.displayName, result.user.email, result.user.photoURL);
+      await providerFn(); // signInWithRedirect navigates away — nothing runs after this
     } catch (err: any) {
       setLoading(false);
-      if (err.message === "FARMER_NO_ACCESS") {
-        setError("Farmers don't have a separate login. Contact your farm Landlord or Manager.");
-      } else if (err.code === "auth/popup-blocked") {
-        setError("Popup blocked — allow popups and try again.");
-      } else if (err.code === "auth/popup-closed-by-user") {
-        setError("Login cancelled.");
-      } else {
-        setError("Login failed. Please try again.");
-      }
+      setError("Login failed. Please try again.");
     }
   };
 
@@ -165,14 +185,14 @@ export default function LoginPage() {
         </p>
 
         <div className="flex flex-col gap-3">
-          <button onClick={() => doAuth(() => { const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account" }); return signInWithPopup(auth, p); })}
+          <button onClick={() => doAuth(() => { const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account" }); return signInWithRedirect(auth, p); })}
             className="flex items-center gap-3 w-full bg-white border border-gray-200 rounded-2xl px-4 py-3.5 shadow-sm active:scale-95 transition-transform"
             style={{ WebkitTapHighlightColor: "transparent" }}>
             <div className="bg-red-50 rounded-full p-2 shrink-0"><Chrome size={20} color="#EA4335" /></div>
             <span className="text-gray-800 font-semibold text-[15px]">Continue with Google</span>
           </button>
 
-          <button onClick={() => doAuth(() => signInWithPopup(auth, new FacebookAuthProvider()))}
+          <button onClick={() => doAuth(() => signInWithRedirect(auth, new FacebookAuthProvider()))}
             className="flex items-center gap-3 w-full bg-blue-600 rounded-2xl px-4 py-3.5 active:scale-95 transition-transform"
             style={{ WebkitTapHighlightColor: "transparent" }}>
             <div className="bg-blue-500 rounded-full p-2 shrink-0">
