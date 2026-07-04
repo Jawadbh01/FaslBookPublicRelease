@@ -1,8 +1,9 @@
 
 
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
+import { saveCache } from "@/components/shared/AuthProvider";
 import { Wheat, Clock, LogOut } from "lucide-react";
 import { signOut } from "firebase/auth";
 
@@ -25,9 +26,26 @@ export default function PendingPage() {
       setLoading(false);
 
       // Check if any request got approved
-      const approved = data.find((r: any) => r.status === "approved");
+      const approved = data.find((r: any) => r.status === "approved") as any;
       if (approved) {
-        window.location.replace("/overview");
+        (async () => {
+          try {
+            // Persist the approved org onto the user's own doc so future logins
+            // resolve it directly, and cache it now so the hard navigation to
+            // /overview below doesn't get bounced back to /login for lack of
+            // any cached session (AuthProvider requires a cache or a page in
+            // its PUBLIC list on every protected route).
+            await updateDoc(doc(db, "users", user.uid), {
+              organizationId: approved.organizationId,
+              status: "active",
+              updatedAt: serverTimestamp(),
+            });
+            const orgSnap = await getDoc(doc(db, "organizations", approved.organizationId));
+            const orgData = orgSnap.exists() ? orgSnap.data() : null;
+            saveCache(user, orgData, approved.role || "worker");
+          } catch {}
+          window.location.replace("/overview");
+        })();
       }
     });
 

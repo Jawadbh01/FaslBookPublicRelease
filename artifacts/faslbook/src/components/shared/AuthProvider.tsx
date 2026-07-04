@@ -16,7 +16,7 @@ const PUBLIC = [...AUTH_PAGES, ...ONBOARDING_PAGES];
 const USER_KEY = "faslbook_user_cache";
 const ORG_KEY  = "faslbook_org_cache";
 
-function saveCache(user: any, org: any, role: string) {
+export function saveCache(user: any, org: any, role: string) {
   try {
     localStorage.setItem(USER_KEY, JSON.stringify({
       uid: user.uid, email: user.email,
@@ -26,7 +26,7 @@ function saveCache(user: any, org: any, role: string) {
   } catch {}
 }
 
-function loadCache() {
+export function loadCache() {
   try {
     const u = localStorage.getItem(USER_KEY);
     const o = localStorage.getItem(ORG_KEY);

@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
+import { saveCache } from "@/components/shared/AuthProvider";
 import { Mail, Lock, ArrowLeft, Loader2, Eye, EyeOff, Wheat } from "lucide-react";
 
 export default function EmailLoginPage() {
@@ -33,7 +34,16 @@ export default function EmailLoginPage() {
         window.location.replace("/role-select");
         return;
       }
+      // Farmers cannot log in — they are managed by landlord/manager
+      if (userData.role === "farmer") {
+        setError("Farmers don't have a separate login. Contact your farm Landlord or Manager.");
+        setLoading(false);
+        return;
+      }
       if (!userData.organizationId) {
+        // Cache role now so if the user later hits a protected page mid-onboarding,
+        // AuthProvider doesn't bounce them straight back to /login for lack of any cache.
+        saveCache(credential.user, null, userData.role);
         if (userData.role === "landlord") {
           window.location.replace("/create-farm");
         } else {
@@ -41,6 +51,10 @@ export default function EmailLoginPage() {
         }
         return;
       }
+
+      const orgSnap = await getDoc(doc(db, "organizations", userData.organizationId));
+      const orgData = orgSnap.exists() ? orgSnap.data() : null;
+      saveCache(credential.user, orgData, userData.role);
       window.location.replace("/overview");
     } catch (err: any) {
       const code = err.code ?? "";

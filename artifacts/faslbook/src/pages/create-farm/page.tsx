@@ -7,6 +7,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { saveCache } from "@/components/shared/AuthProvider";
 import { Wheat, MapPin, ArrowLeft, Loader2, Copy, Check } from "lucide-react";
 
 const generateFarmId = () => {
@@ -91,6 +92,10 @@ export default function CreateFarmPage() {
       });
 
       setOrganization(orgData as any);
+      // Cache now — the "Go to Dashboard" button below does a hard navigation to
+      // /overview, and without a cache AuthProvider would immediately bounce it
+      // straight back to /login for lack of any cached session.
+      saveCache(user, orgData, "landlord");
       setCreatedFarmId(farmId);
 
     } catch (err: any) {

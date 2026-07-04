@@ -41,3 +41,10 @@ description: Key decisions for FaslBook farm OS — auth model, data model, colo
 **Why:** This caused a real "offline mode stuck loading" bug — the download/sync flow assumed these calls would always resolve or reject promptly.
 
 **How to apply:** Wrap any user-facing Firestore operation that gates a loading/syncing UI state in a `Promise.race` with an explicit timeout (~15s), and make sure the timeout path resets the UI state back to a sane value (`online`/`offline`) rather than leaving it stuck.
+
+## Any hard navigation to a protected route must save the auth cache first
+AuthProvider gates every non-PUBLIC route on `faslbook_user_cache`/`faslbook_org_cache` existing in localStorage — if absent, it immediately `replace`s to `/login`, regardless of whether Firebase Auth actually has a live session. Any login/onboarding flow that does `window.location.replace/href` to a protected route (e.g. `/overview`) without first calling `saveCache(user, org, role)` (exported from `AuthProvider.tsx`) causes a visible login-redirect-loop/bounce, even though the user is genuinely authenticated.
+
+**Why:** Only the Google/Facebook flow in `login/page.tsx` originally saved this cache; email login, create-farm success, and join-request-approved (pending page) did not — each was a silent gap causing the reported "login redirect looping" bug.
+
+**How to apply:** Before any `window.location.replace/href` to `/overview` or another protected route, call the exported `saveCache(user, org, role)` from `AuthProvider.tsx` first. When adding new post-auth/post-onboarding redirect targets, grep for existing `saveCache` call sites and follow the same pattern.
