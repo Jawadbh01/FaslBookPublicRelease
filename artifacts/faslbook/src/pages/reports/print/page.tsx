@@ -62,7 +62,7 @@ function DateInput({ value, onChange, label }: { value: string; onChange: (v: st
 
 // ── Report definitions ────────────────────────────────────────
 const REPORTS = [
-  { key:"ledger",  label:"Farmer Ledger",       icon:"📋", desc:"Full account statement for one farmer" },
+  { key:"ledger",  label:"Farmer Khata",        icon:"📋", desc:"Full account statement for one farmer" },
   { key:"parcel",  label:"Parcel Report",        icon:"🌾", desc:"Crops, expenses and profit per parcel" },
   { key:"godown",  label:"Godown Register",      icon:"🏭", desc:"Warehouse inventory and stock movements" },
   { key:"expense", label:"Expense Report",       icon:"💸", desc:"Expenses grouped by month" },

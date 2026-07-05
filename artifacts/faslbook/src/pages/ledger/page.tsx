@@ -609,7 +609,7 @@ export default function LedgerPage() {
         return (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setDetailEntry(null); setEditMode(false); setEditSaved(false); }}>
             <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 pt-6 overflow-y-auto">
+            <div className="px-6 pt-6 pb-6 overflow-y-auto flex-1 min-h-0">
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <h2 className="text-lg font-bold text-gray-800">{editMode ? "Edit Entry" : `${cfg?.emoji || (isCredit ? "💰" : "📋")} ${label}`}</h2>
@@ -703,39 +703,41 @@ export default function LedgerPage() {
                   </div>
                 </>
               )}
-            </div>
 
-            {/* Sticky footer — action button always stays fully visible, never gets
-                squeezed or scrolled out of view inside the scrollable body above. */}
-            <div className="shrink-0 px-6 pt-3 pb-6 border-t border-gray-100">
-              {editSaved ? (
-                <button
-                  onClick={() => { setDetailEntry(null); setEditMode(false); setEditSaved(false); }}
-                  className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
-                  style={{ backgroundColor: "#1B5E20" }}
-                >
-                  Done
-                </button>
-              ) : !editMode ? (
-                canEdit && (
+              {/* Action button lives inside the scrollable area (not a sticky
+                  sibling) so it is always reachable by scrolling — even when
+                  the on-screen keyboard shrinks the visible viewport on mobile,
+                  which `dvh`-based max-heights alone can't account for. */}
+              <div className="pt-4 mt-2 border-t border-gray-100">
+                {editSaved ? (
                   <button
-                    onClick={startEdit}
+                    onClick={() => { setDetailEntry(null); setEditMode(false); setEditSaved(false); }}
                     className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
                     style={{ backgroundColor: "#1B5E20" }}
                   >
-                    Edit Entry
+                    Done
                   </button>
-                )
-              ) : (
-                <button
-                  onClick={saveEdit}
-                  disabled={editSaving}
-                  className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
-                  style={{ backgroundColor: "#1B5E20" }}
-                >
-                  {editSaving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
-                </button>
-              )}
+                ) : !editMode ? (
+                  canEdit && (
+                    <button
+                      onClick={startEdit}
+                      className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
+                      style={{ backgroundColor: "#1B5E20" }}
+                    >
+                      Edit Entry
+                    </button>
+                  )
+                ) : (
+                  <button
+                    onClick={saveEdit}
+                    disabled={editSaving}
+                    className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+                    style={{ backgroundColor: "#1B5E20" }}
+                  >
+                    {editSaving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
           </div>
@@ -747,7 +749,7 @@ export default function LedgerPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-white text-2xl font-bold">Khata</h1>
-            <p className="text-green-200 text-xs mt-0.5">Farm Ledger</p>
+            <p className="text-green-200 text-xs mt-0.5">Main Khata</p>
           </div>
           <button
             onClick={() => window.location.href = "/reports/print?type=ledger"}

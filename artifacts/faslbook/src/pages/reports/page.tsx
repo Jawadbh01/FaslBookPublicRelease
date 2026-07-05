@@ -13,7 +13,7 @@ import { useAuthStore } from "@/store/authStore";
 const fmtPKR = (n: number) => "Rs. " + n.toLocaleString("en-PK");
 
 const REPORT_CARDS = [
-  { key:"print",   title:"Print Reports",    description:"Professional A4 ledger, parcel, stock & expense reports", Icon:Printer,         color:"#1B5E20", bg:"#E8F5E9",  href:"/reports/print" },
+  { key:"print",   title:"Print Reports",    description:"Professional A4 khata, parcel, stock & expense reports", Icon:Printer,         color:"#1B5E20", bg:"#E8F5E9",  href:"/reports/print" },
   { key:"farm",    title:"Farm Overview",    description:"Income, expenses & net profit summary",                   Icon:BarChart2,       color:"#1565C0", bg:"#E3F2FD",  href:"/reports/print?type=summary" },
   { key:"farmer",  title:"Farmer Report",    description:"Parcels, crops & harvest per farmer",                     Icon:User,            color:"#6A1B9A", bg:"#F3E5F5",  href:"/reports/print?type=ledger"  },
   { key:"worker",  title:"Worker Report",    description:"Attendance, earnings & payments",                         Icon:Clock,           color:"#E65100", bg:"#FFF3E0",  href:"/reports/print?type=summary" },
@@ -134,7 +134,7 @@ export default function ReportsPage() {
           <div className="flex-1 text-left">
             <p className="font-bold text-base text-gray-900">Print Reports</p>
             <p className="text-xs text-gray-500 mt-0.5 leading-snug">
-              Professional A4 reports — Farmer Ledger, Parcel, Godown, Expenses, Sales, Farm Summary
+              Professional A4 reports — Farmer Khata, Parcel, Godown, Expenses, Sales, Farm Summary
             </p>
           </div>
           <ChevronRight size={18} color="#1B5E20" className="shrink-0" />

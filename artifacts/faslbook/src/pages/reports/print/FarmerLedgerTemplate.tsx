@@ -46,7 +46,7 @@ export default function FarmerLedgerTemplate({ farmerName, farmerPhone, farmName
 
   return (
     <PrintLayout
-      reportName="Farmer Ledger (Khata)"
+      reportName="Farmer Khata"
       filters={filters}
       printedBy={printedBy}
       farmName={farmName}

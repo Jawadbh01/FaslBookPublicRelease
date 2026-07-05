@@ -734,7 +734,7 @@ export default function DealersPage() {
       {editingTx && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setEditingTx(null); setEditTxSaved(false); }}>
           <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-          <div className="px-6 pt-6 overflow-y-auto">
+          <div className="px-6 pt-6 pb-6 overflow-y-auto flex-1 min-h-0">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-800">
@@ -824,29 +824,31 @@ export default function DealersPage() {
             </div>
             </>
             )}
-          </div>
 
-          {/* Sticky footer — action button always stays fully visible, never gets
-              squeezed or scrolled out of view inside the scrollable body above. */}
-          <div className="shrink-0 px-6 pt-3 pb-6 border-t border-gray-100">
-            {editTxSaved ? (
-              <button
-                onClick={() => { setEditingTx(null); setEditTxSaved(false); }}
-                className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
-                style={{ backgroundColor: "#1B5E20" }}
-              >
-                Done
-              </button>
-            ) : (
-              <button
-                onClick={handleSaveEditTx}
-                disabled={saving}
-                className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
-                style={{ backgroundColor: "#1B5E20" }}
-              >
-                {saving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
-              </button>
-            )}
+            {/* Action button lives inside the scrollable area (not a sticky
+                sibling) so it is always reachable by scrolling — even when
+                the on-screen keyboard shrinks the visible viewport on mobile,
+                which `dvh`-based max-heights alone can't account for. */}
+            <div className="pt-4 mt-2 border-t border-gray-100">
+              {editTxSaved ? (
+                <button
+                  onClick={() => { setEditingTx(null); setEditTxSaved(false); }}
+                  className="w-full py-4 rounded-2xl text-white font-bold text-base active:scale-95 transition-transform"
+                  style={{ backgroundColor: "#1B5E20" }}
+                >
+                  Done
+                </button>
+              ) : (
+                <button
+                  onClick={handleSaveEditTx}
+                  disabled={saving}
+                  className="w-full py-4 rounded-2xl text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+                  style={{ backgroundColor: "#1B5E20" }}
+                >
+                  {saving ? <Loader2 size={22} className="animate-spin" /> : "Save Changes"}
+                </button>
+              )}
+            </div>
           </div>
           </div>
         </div>
