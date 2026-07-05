@@ -1,6 +1,7 @@
 
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   collection, query, where, onSnapshot,
@@ -37,6 +38,7 @@ interface LedgerEntry {
 }
 interface Parcel   { id: string; name: string; }
 interface Dealer   { id: string; name: string; }
+interface FarmerOpt { id: string; name: string; }
 interface Location { lat: number; lng: number; address: string; }
 
 // ── Config ─────────────────────────────────────────────────────
@@ -100,7 +102,7 @@ function useLocationDetector() {
 
 // ── Receipt viewer modal ───────────────────────────────────────
 function ReceiptModal({ url, onClose }: { url: string; onClose: () => void }) {
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4"
       onClick={onClose}
@@ -114,7 +116,8 @@ function ReceiptModal({ url, onClose }: { url: string; onClose: () => void }) {
         </button>
         <img src={url} alt="Receipt" className="w-full rounded-2xl object-contain max-h-[70vh]" />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -129,6 +132,7 @@ export default function LedgerPage() {
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
+  const [farmers, setFarmers] = useState<FarmerOpt[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ── UI ─────────────────────────────────────────────────────
@@ -155,7 +159,7 @@ export default function LedgerPage() {
 
   // ── Income form ────────────────────────────────────────────
   const [incomeForm, setIncomeForm] = useState({
-    type: "cropSale", amount: "", date: todayStr(), parcelId: "", notes: "",
+    type: "cropSale", amount: "", date: todayStr(), parcelId: "", farmerId: "", notes: "",
   });
   const [incomeProofFile, setIncomeProofFile]       = useState<File | null>(null);
   const [incomeProofPreview, setIncomeProofPreview] = useState("");
@@ -163,7 +167,7 @@ export default function LedgerPage() {
 
   // ── Expense form ───────────────────────────────────────────
   const [expenseForm, setExpenseForm] = useState({
-    category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", notes: "",
+    category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", notes: "",
   });
   const [receiptFile, setReceiptFile]       = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState("");
@@ -185,6 +189,14 @@ export default function LedgerPage() {
       query(collection(db, "dealers"), where("organizationId", "==", orgId)),
       (snap) => setDealers(snap.docs.map((d) => ({ id: d.id, name: (d.data() as any).name })))
     ));
+    unsubs.push(onSnapshot(
+      query(collection(db, "workers"), where("organizationId", "==", orgId), where("workerType", "==", "farmer")),
+      (snap) => setFarmers(
+        snap.docs
+          .map((d) => ({ id: d.id, name: (d.data() as any).name || "Unnamed" }))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      )
+    ));
     return () => unsubs.forEach((u) => u());
   }, [orgId]);
 
@@ -203,9 +215,9 @@ export default function LedgerPage() {
   const nextMonth = () => setViewMonth((m) => m.month === 11 ? { year: m.year + 1, month: 0 } : { year: m.year, month: m.month + 1 });
 
   const resetForms = () => {
-    setIncomeForm({ type: "cropSale", amount: "", date: todayStr(), parcelId: "", notes: "" });
+    setIncomeForm({ type: "cropSale", amount: "", date: todayStr(), parcelId: "", farmerId: "", notes: "" });
     setIncomeProofFile(null); setIncomeProofPreview(""); incomeLocation.reset();
-    setExpenseForm({ category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", notes: "" });
+    setExpenseForm({ category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", notes: "" });
     setReceiptFile(null); setReceiptPreview(""); expenseLocation.reset();
     setFormError(""); setSuccess(false);
   };
@@ -224,6 +236,7 @@ export default function LedgerPage() {
     if (!incomeForm.amount || Number(incomeForm.amount) <= 0) { setFormError("Enter a valid amount"); return; }
     if (!incomeForm.date) { setFormError("Select a date"); return; }
     const parcel = parcels.find((p) => p.id === incomeForm.parcelId);
+    const farmer = farmers.find((f) => f.id === incomeForm.farmerId);
     try {
       setSaving(true); setFormError("");
 
@@ -234,6 +247,7 @@ export default function LedgerPage() {
         categoryLabel: incomeTypes[incomeForm.type]?.label || incomeForm.type,
         amount: Number(incomeForm.amount), date: incomeForm.date,
         parcelId: incomeForm.parcelId || "", parcelName: parcel?.name || "",
+        farmerId: incomeForm.farmerId || "", farmerName: farmer?.name || "",
         notes: incomeForm.notes, proofUrl: "",
         location: incomeLocation.location || null,
         createdBy: auth.currentUser?.uid || "",
@@ -271,6 +285,7 @@ export default function LedgerPage() {
     if (!expenseForm.date) { setFormError("Select a date"); return; }
     const parcel = parcels.find((p) => p.id === expenseForm.parcelId);
     const dealer = dealers.find((d) => d.id === expenseForm.dealerId);
+    const farmer = farmers.find((f) => f.id === expenseForm.farmerId);
     try {
       setSaving(true); setFormError("");
 
@@ -282,6 +297,7 @@ export default function LedgerPage() {
         amount: Number(expenseForm.amount), date: expenseForm.date,
         parcelId: expenseForm.parcelId || "", parcelName: parcel?.name || "",
         dealerId: expenseForm.dealerId || "", dealerName: dealer?.name || "",
+        farmerId: expenseForm.farmerId || "", farmerName: farmer?.name || "",
         notes: expenseForm.notes, receiptUrl: "",
         location: expenseLocation.location || null,
         createdBy: auth.currentUser?.uid || "",
@@ -388,6 +404,16 @@ export default function LedgerPage() {
           </select>
         </div>
 
+        {/* Farmer — links this entry to a farmer's own Khata */}
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Farmer (Optional)</label>
+        <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
+          <select value={incomeForm.farmerId} onChange={(e) => setIncomeForm({ ...incomeForm, farmerId: e.target.value })}
+            className="w-full outline-none text-gray-800 text-base bg-transparent">
+            <option value="">— No farmer —</option>
+            {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </div>
+
         {/* Upload Proof */}
         <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Upload Proof</label>
         <input type="file" accept="image/*" id="incomeProofInput" className="hidden" onChange={(e) => {
@@ -491,6 +517,16 @@ export default function LedgerPage() {
             className="w-full outline-none text-gray-800 text-base bg-transparent">
             <option value="">— No parcel —</option>
             {parcels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+
+        {/* Farmer — links this entry to a farmer's own Khata */}
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Farmer (Optional)</label>
+        <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
+          <select value={expenseForm.farmerId} onChange={(e) => setExpenseForm({ ...expenseForm, farmerId: e.target.value })}
+            className="w-full outline-none text-gray-800 text-base bg-transparent">
+            <option value="">— No farmer —</option>
+            {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </div>
 
@@ -606,7 +642,7 @@ export default function LedgerPage() {
           }
         };
 
-        return (
+        return createPortal(
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => { setDetailEntry(null); setEditMode(false); setEditSaved(false); }}>
             <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-6 pb-6 overflow-y-auto flex-1 min-h-0">
@@ -740,7 +776,8 @@ export default function LedgerPage() {
               </div>
             </div>
           </div>
-          </div>
+          </div>,
+          document.body
         );
       })()}
 

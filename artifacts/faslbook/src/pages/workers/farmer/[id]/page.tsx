@@ -1,6 +1,7 @@
 
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams } from "wouter";
 import {
   collection, query, where, onSnapshot,
@@ -455,7 +456,7 @@ export default function FarmerDetailPage() {
       </div>
 
       {/* Add Income / Expense modal */}
-      {addOpen && (
+      {addOpen && createPortal(
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={closeAddForm}>
           <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[85dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 pt-6 pb-6 overflow-y-auto flex-1 min-h-0">
@@ -572,7 +573,8 @@ export default function FarmerDetailPage() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
