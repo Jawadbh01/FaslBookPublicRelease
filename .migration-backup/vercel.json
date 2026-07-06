@@ -1,6 +1,0 @@
-{
-  "buildCommand": "pnpm --filter @workspace/faslbook build",
-  "outputDirectory": "artifacts/faslbook/dist",
-  "installCommand": "pnpm install",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-}
