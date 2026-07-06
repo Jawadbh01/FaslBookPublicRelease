@@ -164,10 +164,12 @@ export default function PrintHubPage() {
         // ── Farmer Ledger ─────────────────────────────────────────
         case "ledger": {
           // Single-field query, filter client-side
-          const all = await getOrgDocs("ledgerEntries", orgId);
+          const CREDIT_TYPES = ["income", "loanTaken", "dealerPayment"];
+          const all = (await getOrgDocs("transactions", orgId))
+            .filter((r: any) => ["income","expense"].includes(r.type));
           const rows = all
             .map(r => {
-              const type = r.type === "credit" ? "credit" : "debit" as "credit"|"debit";
+              const type = CREDIT_TYPES.includes(r.type) ? "credit" : "debit" as "credit"|"debit";
               const cat  = r.category || "other";
               return {
                 id: r.id, type, date: r.date||"",
@@ -188,19 +190,19 @@ export default function PrintHubPage() {
           break;
         }
 
-        // ── Parcel Report — crops + ledgerEntries for that parcel ─
+        // ── Parcel Report — crops + transactions for that parcel ─
         case "parcel": {
           if (selectedParcel) {
             // Single-field queries only, filter parcelId client-side
-            const [allCrops, allLedger] = await Promise.all([
+            const [allCrops, allTxns] = await Promise.all([
               getOrgDocs("crops", orgId),
-              getOrgDocs("ledgerEntries", orgId),
+              getOrgDocs("transactions", orgId),
             ]);
             const cropsForParcel  = allCrops.filter((c:any) => c.parcelId === selectedParcel);
-            const ledgerForParcel = allLedger.filter((e:any) => e.parcelId === selectedParcel);
+            const txnsForParcel = allTxns.filter((e:any) => e.parcelId === selectedParcel);
             setParcelCrops(cropsForParcel);
-            setParcelExpenses(ledgerForParcel.filter((e:any) => e.type === "debit"));
-            setParcelIncome(ledgerForParcel.filter((e:any)  => e.type === "credit"));
+            setParcelExpenses(txnsForParcel.filter((e:any) => e.type === "expense"));
+            setParcelIncome(txnsForParcel.filter((e:any)  => e.type === "income"));
           }
           break;
         }
@@ -216,12 +218,12 @@ export default function PrintHubPage() {
           break;
         }
 
-        // ── Expense Report — ledgerEntries type=="debit" ──────────
+        // ── Expense Report — transactions type=="expense" ──────────
         // Single-field query only, filter type client-side
         case "expense": {
-          const all = await getOrgDocs("ledgerEntries", orgId);
+          const all = await getOrgDocs("transactions", orgId);
           const rows = all
-            .filter(r => r.type === "debit")
+            .filter(r => r.type === "expense")
             .map(r => {
               const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
               const cat  = r.category||"other";
@@ -235,12 +237,12 @@ export default function PrintHubPage() {
           break;
         }
 
-        // ── Sales / Income Report — ledgerEntries type=="credit" ──
+        // ── Sales / Income Report — transactions type=="income" ──
         // Single-field query only, filter type client-side
         case "sales": {
-          const all = await getOrgDocs("ledgerEntries", orgId);
+          const all = await getOrgDocs("transactions", orgId);
           const rows = all
-            .filter(r => r.type === "credit")
+            .filter(r => r.type === "income")
             .map(r => {
               const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
               return { id:r.id, date,
@@ -259,9 +261,10 @@ export default function PrintHubPage() {
           break;
         }
 
-        // ── Dealer Report — dealerTransactions, optionally per dealer ──
+        // ── Dealer Report — transactions dealerPurchase/dealerPayment, optionally per dealer ──
         case "dealer": {
-          const all = await getOrgDocs("dealerTransactions", orgId);
+          const all = (await getOrgDocs("transactions", orgId))
+            .filter((t: any) => t.type === "dealerPurchase" || t.type === "dealerPayment");
           const rows = all
             .filter(t => !selectedDealer || t.dealerId === selectedDealer)
             .map(t => {
@@ -270,8 +273,8 @@ export default function PrintHubPage() {
                 id: t.id, date,
                 dealerId: t.dealerId || "",
                 dealerName: t.dealerName || "",
-                type: t.type === "payment" ? "payment" : "purchase",
-                items: t.items || "",
+                type: t.type === "dealerPayment" ? "payment" : "purchase",
+                items: t.description || "",
                 paymentType: t.paymentType || "",
                 amount: Number(t.amount) || 0,
                 notes: t.notes || "",
@@ -307,16 +310,16 @@ export default function PrintHubPage() {
         // ── Farm Summary ──────────────────────────────────────────
         // Single-field queries only, filter workerType/type client-side
         case "summary": {
-          const [allWorkers,parcelsD,cropsD,ledgerD,invD] = await Promise.all([
+          const [allWorkers,parcelsD,cropsD,txnsD,invD] = await Promise.all([
             getOrgDocs("workers", orgId),
             getOrgDocs("parcels", orgId),
             getOrgDocs("crops", orgId),
-            getOrgDocs("ledgerEntries", orgId),
+            getOrgDocs("transactions", orgId),
             getOrgDocs("inventoryItems", orgId),
           ]);
           const farmerCount = allWorkers.filter((w:any) => w.workerType === "farmer").length;
-          const expD  = ledgerD.filter((e:any) => e.type === "debit");
-          const incD  = ledgerD.filter((e:any) => e.type === "credit");
+          const expD  = txnsD.filter((e:any) => e.type === "expense");
+          const incD  = txnsD.filter((e:any) => e.type === "income");
 
           const totalInc   = incD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);
           const totalExp   = expD.reduce((s:number,d:any)=>s+(Number(d.amount)||0),0);

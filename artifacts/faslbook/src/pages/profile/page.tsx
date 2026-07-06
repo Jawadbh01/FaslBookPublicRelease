@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { Link } from "wouter";
 import { signOut } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -14,7 +15,7 @@ import { useLangStore } from "@/store/langStore";
 import {
   ChevronLeft, User, Mail, Phone,
   LogOut, Camera, Sun, Moon, Bell,
-  Copy, Check, Wheat, Loader2,
+  Copy, Check, Wheat, Loader2, Calendar, ChevronRight,
 } from "lucide-react";
 import type { Lang } from "@/lib/i18n/translations";
 
@@ -330,6 +331,19 @@ export default function ProfilePage() {
                 {copied ? "Copied!" : "Copy"}
               </button>
             </div>
+            <div className="h-px bg-gray-100 mx-4" />
+            <Link href="/seasons">
+              <div className="flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-gray-50">
+                <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "#E8F5E9" }}>
+                  <Calendar size={18} color="#1B5E20" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-gray-800 font-semibold text-sm">Manage Seasons</p>
+                  <p className="text-gray-400 text-xs">Create, edit and switch seasons</p>
+                </div>
+                <ChevronRight size={18} color="#9CA3AF" />
+              </div>
+            </Link>
           </div>
         </div>
       )}

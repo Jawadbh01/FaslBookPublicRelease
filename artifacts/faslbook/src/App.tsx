@@ -37,6 +37,7 @@ import NotificationsPage from "@/pages/notifications/page";
 import ProfilePage from "@/pages/profile/page";
 import ReportsPage from "@/pages/reports/page";
 import PrintHubPage from "@/pages/reports/print/page";
+import SeasonsPage from "@/pages/seasons/page";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -138,6 +139,9 @@ function AnimatedSwitch() {
         </Route>
         <Route path="/reports">
           {() => <DashboardLayout><ReportsPage /></DashboardLayout>}
+        </Route>
+        <Route path="/seasons">
+          {() => <DashboardLayout><SeasonsPage /></DashboardLayout>}
         </Route>
         <Route path="/reports/print">
           {() => <DashboardLayout><PrintHubPage /></DashboardLayout>}

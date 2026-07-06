@@ -3,6 +3,7 @@ import {
   serverTimestamp, getDoc, increment,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
+import { ensureDefaultSeason } from "@/lib/firebase/seasons";
 
 interface FarmerTransferInput {
   itemId: string;
@@ -17,6 +18,7 @@ interface FarmerTransferInput {
 }
 
 export async function runFarmerTransferWorkflow(input: FarmerTransferInput) {
+  const season = await ensureDefaultSeason(input.organizationId);
   const batch = writeBatch(db);
   const user = auth.currentUser;
   const now = serverTimestamp();
@@ -74,27 +76,29 @@ export async function runFarmerTransferWorkflow(input: FarmerTransferInput) {
     });
   }
 
-  // ── 4. Ledger entry ────────────────────────────────────────
+  // ── 4. Transaction (expense) — only recorded when a price is set ──
   const amount = Math.round((input.pricePerUnit || 0) * input.quantity);
-  const ledgerRef = doc(collection(db, "ledgerEntries"));
-  batch.set(ledgerRef, {
-    id: ledgerRef.id,
-    organizationId: input.organizationId,
-    type: "debit",
-    category: "stockTransfer",
-    categoryLabel: "Godown Transfer",
-    direction: "debit",
-    amount,
-    date: new Date().toISOString().split("T")[0],
-    farmerId: input.farmerId,
-    farmerName: input.farmerName,
-    notes: `Transferred ${input.quantity} ${input.unit} of ${input.itemName} to ${input.farmerName}`,
-    description: `Transferred ${input.quantity} ${input.unit} of ${input.itemName} to ${input.farmerName}`,
-    sourceId: txRef.id,
-    sourceType: "inventoryTransaction",
-    createdAt: now,
-    syncStatus: "synced",
-  });
+  const txnRef = doc(collection(db, "transactions"));
+  if (amount > 0) {
+    batch.set(txnRef, {
+      id: txnRef.id,
+      organizationId: input.organizationId,
+      seasonId: season.id,
+      type: "expense",
+      category: "stockTransfer",
+      categoryLabel: "Godown Transfer",
+      amount,
+      date: new Date().toISOString().split("T")[0],
+      farmerId: input.farmerId,
+      farmerName: input.farmerName,
+      notes: `Transferred ${input.quantity} ${input.unit} of ${input.itemName} to ${input.farmerName}`,
+      description: `Transferred ${input.quantity} ${input.unit} of ${input.itemName} to ${input.farmerName}`,
+      createdBy: user?.uid || "",
+      createdByName: user?.displayName || "",
+      createdAt: now,
+      syncStatus: "synced",
+    });
+  }
 
   // ── 5. Activity log ────────────────────────────────────────
   const logRef = doc(collection(db, "activityLogs"));

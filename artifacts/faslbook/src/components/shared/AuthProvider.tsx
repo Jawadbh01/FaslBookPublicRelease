@@ -3,6 +3,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { migrateOrgToTransactions } from "@/lib/migration/migrateToTransactions";
 
 // Pages a fully-onboarded, cached user should be bounced away from straight to /overview.
 const AUTH_PAGES = ["/login", "/email", "/register"];
@@ -143,6 +144,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         const orgSnap = await getDoc(doc(db, "organizations", userData.organizationId));
         const orgData = orgSnap.exists() ? orgSnap.data() : null;
         if (orgData) setOrganization(orgData as any);
+
+        // Fire-and-forget one-time migration of legacy ledgerEntries into the
+        // unified `transactions` collection. Never blocks sign-in/navigation.
+        if (orgData && !orgData.transactionsMigrated) {
+          migrateOrgToTransactions(userData.organizationId).catch((err) =>
+            console.error("[AuthProvider] transactions migration failed", err)
+          );
+        }
 
         saveCache(firebaseUser, orgData, userData.role);
         setUser(firebaseUser);

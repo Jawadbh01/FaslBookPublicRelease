@@ -36,12 +36,12 @@ export default function ReportsPage() {
     if (!orgId) return;
     (async () => {
       try {
-        const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId)));
+        const snap = await getDocs(query(collection(db,"transactions"), where("organizationId","==",orgId)));
         let inc = 0, exp = 0;
         snap.forEach((d) => {
           const { type, amount } = d.data();
-          if (type === "credit") inc += Number(amount) || 0;
-          else                   exp += Number(amount) || 0;
+          if (type === "income") inc += Number(amount) || 0;
+          else if (type === "expense") exp += Number(amount) || 0;
         });
         setTotalIncome(inc);
         setTotalExpense(exp);
@@ -52,12 +52,12 @@ export default function ReportsPage() {
 
   async function getExportData() {
     if (!orgId) return { columns: [] as string[], rows: [] as (string|number)[][] };
-    const snap = await getDocs(query(collection(db,"ledgerEntries"), where("organizationId","==",orgId)));
+    const snap = await getDocs(query(collection(db,"transactions"), where("organizationId","==",orgId), where("type","in",["income","expense"])));
     const columns = ["Date","Type","Category","Amount (Rs)","Notes"];
     const rows: (string|number)[][] = snap.docs
       .map((d) => {
         const data = d.data();
-        return [data.date??"", data.type==="credit"?"Income":"Expense", data.categoryLabel??data.category??"", Number(data.amount)||0, data.notes??""];
+        return [data.date??"", data.type==="income"?"Income":"Expense", data.categoryLabel??data.category??"", Number(data.amount)||0, data.notes??""];
       })
       .sort((a, b) => String(b[0]).localeCompare(String(a[0])));
     return { columns, rows };

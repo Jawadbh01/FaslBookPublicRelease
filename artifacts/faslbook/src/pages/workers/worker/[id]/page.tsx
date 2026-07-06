@@ -8,6 +8,8 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { addTransaction } from "@/lib/firebase/transactions";
+import { ensureDefaultSeason } from "@/lib/firebase/seasons";
 import { ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
 
 interface Worker {
@@ -148,17 +150,17 @@ export default function WorkerDetailPage() {
         createdAt: serverTimestamp(),
         syncStatus: "synced",
       });
-      await addDoc(collection(db, "ledgerEntries"), {
-        organizationId: orgId,
-        type: "workerPayment",
-        direction: "debit",
-        category: "debit",
+      const season = await ensureDefaultSeason(orgId as string);
+      await addTransaction({
+        organizationId: orgId as string,
+        seasonId: season.id,
+        type: "expense",
+        category: "workerPayment",
         categoryLabel: "Worker Payment",
         amount,
         date: new Date().toISOString().split("T")[0],
+        description: `Payment to ${worker?.name}`,
         notes: `Payment to ${worker?.name}`,
-        createdAt: serverTimestamp(),
-        syncStatus: "synced",
       });
       await addDoc(collection(db, "activityLogs"), {
         organizationId: orgId,

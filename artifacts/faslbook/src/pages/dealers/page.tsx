@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { ensureDefaultSeason } from "@/lib/firebase/seasons";
 import {
   Plus, X, Loader2, Phone, MapPin,
   Handshake, CreditCard,
@@ -22,21 +23,21 @@ interface Dealer {
   phone: string;
   address: string;
   notes: string;
-  totalPurchased: number;
-  totalPaid: number;
   organizationId: string;
   createdAt: any;
 }
 
+// Dealer Due = Purchases − Payments, derived live from `transactions`
+// (type dealerPurchase/dealerPayment) — dealer docs hold no running totals.
 interface DealerTx {
   id: string;
   dealerId: string;
   dealerName: string;
-  type: "purchase" | "payment";
-  items: string;
+  type: "dealerPurchase" | "dealerPayment";
+  description: string;
   amount: number;
   paymentType: "cash" | "credit";
-  date: any;
+  date: string;
   notes: string;
   edited?: boolean;
   editedAt?: any;
@@ -90,7 +91,7 @@ export default function DealersPage() {
   useEffect(() => {
     if (!orgId) return;
     const unsub = onSnapshot(
-      query(collection(db, "dealerTransactions"), where("organizationId", "==", orgId)),
+      query(collection(db, "transactions"), where("organizationId", "==", orgId), where("type", "in", ["dealerPurchase", "dealerPayment"])),
       (snap) => {
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DealerTx));
         setDealerTxns(data);
@@ -114,9 +115,17 @@ export default function DealersPage() {
     return () => unsub();
   }, [orgId]);
 
-  const totalOutstanding = dealers.reduce(
-    (sum, d) => sum + ((d.totalPurchased || 0) - (d.totalPaid || 0)), 0
-  );
+  const dealerTotals = (dealerId: string) => {
+    const txns = dealerTxns.filter((t) => t.dealerId === dealerId);
+    const totalPurchased = txns.filter((t) => t.type === "dealerPurchase").reduce((s, t) => s + (t.amount || 0), 0);
+    const totalPaid = txns.filter((t) => t.type === "dealerPayment").reduce((s, t) => s + (t.amount || 0), 0);
+    return { totalPurchased, totalPaid };
+  };
+
+  const totalOutstanding = dealers.reduce((sum, d) => {
+    const { totalPurchased, totalPaid } = dealerTotals(d.id);
+    return sum + (totalPurchased - totalPaid);
+  }, 0);
 
   const handleSaveDealer = async () => {
     if (!dForm.name) { setError("Dealer name is required"); return; }
@@ -128,8 +137,6 @@ export default function DealersPage() {
         phone: dForm.phone.trim(),
         address: dForm.address.trim(),
         notes: dForm.notes.trim(),
-        totalPurchased: 0,
-        totalPaid: 0,
         organizationId: orgId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -159,39 +166,22 @@ export default function DealersPage() {
       setSaving(true);
       setError("");
       const amount = Number(txForm.amount);
+      const season = await ensureDefaultSeason(orgId!);
 
-      await addDoc(collection(db, "dealerTransactions"), {
+      await addDoc(collection(db, "transactions"), {
+        organizationId: orgId,
+        seasonId: season.id,
+        type: txForm.type === "purchase" ? "dealerPurchase" : "dealerPayment",
         dealerId: selectedDealer.id,
         dealerName: selectedDealer.name,
-        type: txForm.type,
-        items: txForm.items,
         amount,
-        paymentType: txForm.paymentType,
-        date: new Date(txForm.date),
-        notes: txForm.notes,
-        organizationId: orgId,
-        createdAt: serverTimestamp(),
-        syncStatus: "synced",
-      });
-
-      const update: any = { updatedAt: serverTimestamp() };
-      if (txForm.type === "purchase") {
-        update.totalPurchased = (selectedDealer.totalPurchased || 0) + amount;
-      } else {
-        update.totalPaid = (selectedDealer.totalPaid || 0) + amount;
-      }
-      await updateDoc(doc(db, "dealers", selectedDealer.id), update);
-
-      await addDoc(collection(db, "ledgerEntries"), {
-        organizationId: orgId,
-        type: txForm.type === "purchase" ? "dealerCredit" : "dealerPayment",
-        direction: txForm.type === "purchase" ? "debit" : "credit",
-        amount,
+        date: txForm.date,
         description: txForm.type === "purchase"
-          ? `Purchase from ${selectedDealer.name}: ${txForm.items}`
+          ? (txForm.items || `Purchase from ${selectedDealer.name}`)
           : `Payment to ${selectedDealer.name}`,
-        sourceId: selectedDealer.id,
-        sourceType: "dealer",
+        paymentType: txForm.paymentType,
+        notes: txForm.notes,
+        createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
         syncStatus: "synced",
       });
@@ -231,10 +221,10 @@ export default function DealersPage() {
   const openEditTx = (tx: DealerTx) => {
     setEditingTx(tx);
     setEditForm({
-      items: tx.items || "",
+      items: tx.description || "",
       amount: String(tx.amount || ""),
       paymentType: tx.paymentType || "credit",
-      date: tx.date?.toDate ? tx.date.toDate().toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+      date: tx.date || new Date().toISOString().split("T")[0],
       notes: tx.notes || "",
     });
   };
@@ -250,28 +240,16 @@ export default function DealersPage() {
       setError("");
       const newAmount = Number(editForm.amount);
       const oldAmount = editingTx.amount || 0;
-      const delta = newAmount - oldAmount;
 
-      await updateDoc(doc(db, "dealerTransactions", editingTx.id), {
-        items: editForm.items,
+      await updateDoc(doc(db, "transactions", editingTx.id), {
+        description: editingTx.type === "dealerPurchase" ? editForm.items : editingTx.description,
         amount: newAmount,
         paymentType: editForm.paymentType,
-        date: new Date(editForm.date),
+        date: editForm.date,
         notes: editForm.notes,
         edited: true,
         editedAt: serverTimestamp(),
       });
-
-      if (delta !== 0) {
-        const dealer = dealers.find((d) => d.id === editingTx.dealerId);
-        if (dealer) {
-          const field = editingTx.type === "purchase" ? "totalPurchased" : "totalPaid";
-          await updateDoc(doc(db, "dealers", dealer.id), {
-            [field]: (dealer[field as "totalPurchased" | "totalPaid"] || 0) + delta,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      }
 
       await addDoc(collection(db, "activityLogs"), {
         organizationId: orgId,
@@ -280,7 +258,7 @@ export default function DealersPage() {
         action: "DEALER_TX_EDITED",
         description: `Edited ${editingTx.type} of Rs. ${oldAmount} → Rs. ${newAmount} for ${editingTx.dealerName}`,
         recordId: editingTx.id,
-        recordType: "dealerTransactions",
+        recordType: "transactions",
         createdAt: serverTimestamp(),
         syncStatus: "synced",
       });
@@ -359,7 +337,8 @@ export default function DealersPage() {
 
   // ── Transaction Form ───────────────────────────────────────
   if (showTx && selectedDealer) {
-    const outstanding = (selectedDealer.totalPurchased || 0) - (selectedDealer.totalPaid || 0);
+    const { totalPurchased: selPurchased, totalPaid: selPaid } = dealerTotals(selectedDealer.id);
+    const outstanding = selPurchased - selPaid;
     return (
       <div className="min-h-screen bg-white flex flex-col">
         <div className="flex items-center px-4 pt-12 pb-6" style={{ backgroundColor: "#1B5E20" }}>
@@ -582,7 +561,8 @@ export default function DealersPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {dealers.map((dealer) => {
-              const outstanding = (dealer.totalPurchased || 0) - (dealer.totalPaid || 0);
+              const { totalPurchased, totalPaid } = dealerTotals(dealer.id);
+              const outstanding = totalPurchased - totalPaid;
               const hasBalance = outstanding > 0;
               return (
                 <div key={dealer.id} className="bg-white rounded-2xl p-4 shadow-sm">
@@ -610,25 +590,25 @@ export default function DealersPage() {
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     <div className="rounded-xl p-2" style={{ backgroundColor: "#F5F5F5" }}>
                       <p className="text-gray-400 text-xs mb-0.5">Total Purchased</p>
-                      <p className="text-gray-800 font-bold text-sm">{fmt(dealer.totalPurchased || 0)}</p>
+                      <p className="text-gray-800 font-bold text-sm">{fmt(totalPurchased)}</p>
                     </div>
                     <div className="rounded-xl p-2" style={{ backgroundColor: "#F5F5F5" }}>
                       <p className="text-gray-400 text-xs mb-0.5">Total Paid</p>
-                      <p className="font-bold text-sm" style={{ color: "#1B5E20" }}>{fmt(dealer.totalPaid || 0)}</p>
+                      <p className="font-bold text-sm" style={{ color: "#1B5E20" }}>{fmt(totalPaid)}</p>
                     </div>
                   </div>
 
-                  {(dealer.totalPurchased || 0) > 0 && (
+                  {totalPurchased > 0 && (
                     <div className="mb-3">
                       <div className="flex justify-between text-xs text-gray-400 mb-1">
                         <span>Paid</span>
-                        <span>{Math.round(((dealer.totalPaid || 0) / (dealer.totalPurchased || 1)) * 100)}%</span>
+                        <span>{Math.round((totalPaid / (totalPurchased || 1)) * 100)}%</span>
                       </div>
                       <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full"
                           style={{
-                            width: `${Math.min(100, ((dealer.totalPaid || 0) / (dealer.totalPurchased || 1)) * 100)}%`,
+                            width: `${Math.min(100, (totalPaid / (totalPurchased || 1)) * 100)}%`,
                             backgroundColor: "#1B5E20",
                           }}
                         />
@@ -687,20 +667,20 @@ export default function DealersPage() {
                             {txns.map((tx) => (
                               <div key={tx.id} className="flex items-center gap-2 rounded-xl px-3 py-2" style={{ backgroundColor: "#F9FAFB" }}>
                                 <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                                  style={{ backgroundColor: tx.type === "purchase" ? "#FFEBEE" : "#E8F5E9" }}>
-                                  {tx.type === "purchase"
+                                  style={{ backgroundColor: tx.type === "dealerPurchase" ? "#FFEBEE" : "#E8F5E9" }}>
+                                  {tx.type === "dealerPurchase"
                                     ? <ArrowDownLeft size={13} color="#C62828" />
                                     : <ArrowUpRight size={13} color="#1B5E20" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-semibold text-gray-800 truncate">
-                                    {tx.type === "purchase" ? (tx.items || "Purchase") : "Payment"}
+                                    {tx.type === "dealerPurchase" ? (tx.description || "Purchase") : "Payment"}
                                     {tx.edited && <span className="text-gray-400 font-normal italic"> (edited)</span>}
                                   </p>
                                   <p className="text-[10px] text-gray-400">{fmtTxDate(tx.date)}</p>
                                 </div>
-                                <p className="text-xs font-bold shrink-0" style={{ color: tx.type === "purchase" ? "#C62828" : "#1B5E20" }}>
-                                  {tx.type === "purchase" ? "+" : "−"}{fmt(tx.amount)}
+                                <p className="text-xs font-bold shrink-0" style={{ color: tx.type === "dealerPurchase" ? "#C62828" : "#1B5E20" }}>
+                                  {tx.type === "dealerPurchase" ? "+" : "−"}{fmt(tx.amount)}
                                 </p>
                                 {canEdit && (
                                   <button onClick={() => openEditTx(tx)} className="p-1.5 rounded-full active:scale-95 transition-transform shrink-0">
@@ -739,7 +719,7 @@ export default function DealersPage() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-lg font-bold text-gray-800">
-                  {editTxSaved ? "Saved" : `Edit ${editingTx.type === "purchase" ? "Purchase" : "Payment"}`}
+                  {editTxSaved ? "Saved" : `Edit ${editingTx.type === "dealerPurchase" ? "Purchase" : "Payment"}`}
                 </h2>
                 <p className="text-gray-400 text-xs">{editingTx.dealerName}</p>
               </div>
@@ -760,7 +740,7 @@ export default function DealersPage() {
               </div>
             ) : (
             <>
-            {editingTx.type === "purchase" && (
+            {editingTx.type === "dealerPurchase" && (
               <div className="mb-4">
                 <label className="text-gray-600 text-sm font-medium mb-2 block">Items Purchased</label>
                 <input
@@ -782,7 +762,7 @@ export default function DealersPage() {
               />
             </div>
 
-            {editingTx.type === "purchase" && (
+            {editingTx.type === "dealerPurchase" && (
               <div className="mb-4">
                 <label className="text-gray-600 text-sm font-medium mb-3 block">Payment Type</label>
                 <div className="flex gap-3">

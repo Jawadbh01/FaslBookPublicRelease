@@ -3,22 +3,25 @@
 import { useEffect, useState } from "react";
 import {
   collection, query, where, onSnapshot,
-  addDoc, updateDoc, doc, serverTimestamp,
+  addDoc, serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { ensureDefaultSeason } from "@/lib/firebase/seasons";
 import {
   Plus, X, Loader2, User,
   Building2, Users, HandCoins,
   Check, Calendar,
 } from "lucide-react";
 
+// Loan docs hold only metadata (who, type, amount taken, dates). paidAmount
+// is NOT stored — Loan Due = Taken − Repaid, derived live from `transactions`
+// (type loanRepayment, matched by loanId).
 interface Loan {
   id: string;
   lenderName: string;
   lenderType: "person" | "relative" | "bank" | "friend" | "other";
   amount: number;
-  paidAmount: number;
   borrowDate: any;
   dueDate: any;
   notes: string;
@@ -58,6 +61,8 @@ export default function LoansPage() {
     notes: "",
   });
 
+  const [repayments, setRepayments] = useState<{ id: string; loanId: string; amount: number }[]>([]);
+
   useEffect(() => {
     if (!orgId) return;
     const unsub = onSnapshot(
@@ -73,8 +78,20 @@ export default function LoansPage() {
     return () => unsub();
   }, [orgId]);
 
+  useEffect(() => {
+    if (!orgId) return;
+    const unsub = onSnapshot(
+      query(collection(db, "transactions"), where("organizationId", "==", orgId), where("type", "==", "loanRepayment")),
+      (snap) => setRepayments(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))
+    );
+    return () => unsub();
+  }, [orgId]);
+
+  const paidAmountFor = (loanId: string) =>
+    repayments.filter((r) => r.loanId === loanId).reduce((s, r) => s + (r.amount || 0), 0);
+
   const totalBorrowed = loans.reduce((s, l) => s + (l.amount || 0), 0);
-  const totalPaid = loans.reduce((s, l) => s + (l.paidAmount || 0), 0);
+  const totalPaid = repayments.reduce((s, r) => s + (r.amount || 0), 0);
   const totalRemaining = totalBorrowed - totalPaid;
 
   const fmt = (n: number) => "Rs. " + n.toLocaleString("en-PK");
@@ -91,11 +108,11 @@ export default function LoansPage() {
       setSaving(true);
       setError("");
       const amount = Number(form.amount);
+      const season = await ensureDefaultSeason(orgId!);
       const loanRef = await addDoc(collection(db, "loans"), {
         lenderName: form.lenderName.trim(),
         lenderType: form.lenderType,
         amount,
-        paidAmount: 0,
         borrowDate: new Date(form.borrowDate),
         dueDate: form.dueDate ? new Date(form.dueDate) : null,
         notes: form.notes,
@@ -105,14 +122,16 @@ export default function LoansPage() {
         syncStatus: "synced",
       });
 
-      await addDoc(collection(db, "ledgerEntries"), {
+      await addDoc(collection(db, "transactions"), {
         organizationId: orgId,
-        type: "loan",
-        direction: "credit",
+        seasonId: season.id,
+        type: "loanTaken",
+        loanId: loanRef.id,
         amount,
-        description: `Borrowed Rs. ${amount} from ${form.lenderName}`,
-        sourceId: loanRef.id,
-        sourceType: "loan",
+        date: form.borrowDate,
+        description: `Borrowed from ${form.lenderName}`,
+        notes: form.notes,
+        createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
         syncStatus: "synced",
       });
@@ -146,25 +165,24 @@ export default function LoansPage() {
     if (!payAmount || isNaN(Number(payAmount))) { setError("Enter valid amount"); return; }
     if (!selectedLoan) return;
     const amount = Number(payAmount);
-    const remaining = (selectedLoan.amount || 0) - (selectedLoan.paidAmount || 0);
+    const remaining = (selectedLoan.amount || 0) - paidAmountFor(selectedLoan.id);
     if (amount > remaining) { setError(`Cannot pay more than remaining: ${fmt(remaining)}`); return; }
 
     try {
       setSaving(true);
       setError("");
-      await updateDoc(doc(db, "loans", selectedLoan.id), {
-        paidAmount: (selectedLoan.paidAmount || 0) + amount,
-        updatedAt: serverTimestamp(),
-      });
+      const season = await ensureDefaultSeason(orgId!);
 
-      await addDoc(collection(db, "ledgerEntries"), {
+      await addDoc(collection(db, "transactions"), {
         organizationId: orgId,
-        type: "loanPayment",
-        direction: "debit",
+        seasonId: season.id,
+        type: "loanRepayment",
+        loanId: selectedLoan.id,
         amount,
-        description: `Loan payment to ${selectedLoan.lenderName}: Rs. ${amount}`,
-        sourceId: selectedLoan.id,
-        sourceType: "loan",
+        date: new Date().toISOString().split("T")[0],
+        description: `Loan payment to ${selectedLoan.lenderName}`,
+        notes: payNote,
+        createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
         syncStatus: "synced",
       });
@@ -313,7 +331,7 @@ export default function LoansPage() {
 
   // ── Payment Form ───────────────────────────────────────────
   if (showPay && selectedLoan) {
-    const remaining = (selectedLoan.amount || 0) - (selectedLoan.paidAmount || 0);
+    const remaining = (selectedLoan.amount || 0) - paidAmountFor(selectedLoan.id);
     return (
       <div className="min-h-screen bg-white flex flex-col">
         <div className="flex items-center px-4 pt-12 pb-6" style={{ backgroundColor: "#1B5E20" }}>
@@ -435,8 +453,9 @@ export default function LoansPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {loans.map((loan) => {
-              const remaining = (loan.amount || 0) - (loan.paidAmount || 0);
-              const paidPct = Math.min(100, ((loan.paidAmount || 0) / (loan.amount || 1)) * 100);
+              const loanPaid = paidAmountFor(loan.id);
+              const remaining = (loan.amount || 0) - loanPaid;
+              const paidPct = Math.min(100, (loanPaid / (loan.amount || 1)) * 100);
               const lt = lenderTypes.find((t) => t.val === loan.lenderType) || lenderTypes[0];
               const LIcon = lt.icon;
               const isFullyPaid = remaining <= 0;
@@ -470,7 +489,7 @@ export default function LoansPage() {
                     </div>
                     <div className="bg-gray-50 rounded-xl p-2">
                       <p className="text-gray-400 text-xs mb-0.5">Paid</p>
-                      <p className="font-bold text-sm" style={{ color: "#1B5E20" }}>{fmt(loan.paidAmount || 0)}</p>
+                      <p className="font-bold text-sm" style={{ color: "#1B5E20" }}>{fmt(loanPaid)}</p>
                     </div>
                   </div>
 

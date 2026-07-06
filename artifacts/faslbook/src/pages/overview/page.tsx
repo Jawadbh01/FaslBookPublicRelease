@@ -10,6 +10,8 @@ import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { useLocation } from "wouter";
 import { useLangStore } from "@/store/langStore";
+import { subscribeSeasons, getActiveSeason, type Season } from "@/lib/firebase/seasons";
+import { subscribeTransactions, sumByType, filterByDateRange, type Transaction } from "@/lib/firebase/transactions";
 import {
   TrendingUp, TrendingDown, Wallet,
   Package, Plus, ArrowUpRight,
@@ -70,16 +72,27 @@ export default function OverviewPage() {
   
   // ── State ────────────────────────────────────────────────────
   const [userName, setUserName]           = useState<string>("");
-  const [income, setIncome]               = useState(0);
-  const [expense, setExpense]             = useState(0);
   const [inventoryValue, setInventoryValue] = useState(0);
-  const [pendingLoans, setPendingLoans]   = useState(0);
-  const [dealerDues, setDealerDues]       = useState(0);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [recentLedger, setRecentLedger]   = useState<any[]>([]);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [loading, setLoading]             = useState(true);
   const [copied, setCopied]               = useState(false);
+
+  // Overview filter — recalculates Income/Expense/Profit/Dealer Dues/Loan Dues live.
+  type FilterKey = "currentSeason" | "last30" | "last90" | "currentYear" | "allTime";
+  const [filter, setFilter] = useState<FilterKey>("currentSeason");
+  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [seasons, setSeasons] = useState<Season[]>([]);
+  const [activeSeason, setActiveSeason] = useState<Season | null>(null);
+  const [allTxns, setAllTxns] = useState<Transaction[]>([]);
+
+  const filterLabels: Record<FilterKey, string> = {
+    currentSeason: "Current Season",
+    last30: "Last 30 Days",
+    last90: "Last 90 Days",
+    currentYear: "Current Year",
+    allTime: "All Time",
+  };
 
   // ── Fetch user name from Firestore ───────────────────────────
   useEffect(() => {
@@ -98,26 +111,9 @@ export default function OverviewPage() {
     if (!orgId) return;
     const unsubs: (() => void)[] = [];
 
-    unsubs.push(onSnapshot(
-      query(collection(db, "ledgerEntries"), where("organizationId", "==", orgId)),
-      (snap) => {
-        const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as any));
-        setIncome(all.filter((e: any) => e.type === "credit").reduce((s: number, e: any) => s + (e.amount || 0), 0));
-        setExpense(all.filter((e: any) => e.type === "debit").reduce((s: number, e: any) => s + (e.amount || 0), 0));
-        const sorted = [...all].sort((a: any, b: any) => (b.date > a.date ? 1 : -1)).slice(0, 5);
-        setRecentLedger(sorted);
-      }
-    ));
-
-    unsubs.push(onSnapshot(
-      query(collection(db, "loans"), where("organizationId", "==", orgId)),
-      (snap) => setPendingLoans(snap.docs.reduce((s, d) => s + ((d.data().amount || 0) - (d.data().paidAmount || 0)), 0))
-    ));
-
-    unsubs.push(onSnapshot(
-      query(collection(db, "dealerTransactions"), where("organizationId", "==", orgId)),
-      (snap) => setDealerDues(snap.docs.reduce((s, d) => s + (d.data().payable || 0), 0))
-    ));
+    unsubs.push(subscribeTransactions(orgId, setAllTxns));
+    unsubs.push(subscribeSeasons(orgId, setSeasons));
+    getActiveSeason(orgId).then(setActiveSeason);
 
     unsubs.push(onSnapshot(
       query(collection(db, "inventoryItems"), where("organizationId", "==", orgId)),
@@ -150,7 +146,39 @@ export default function OverviewPage() {
     return () => unsubs.forEach((u) => u());
   }, [orgId, role]);
 
+  // ── Filter → date range → filtered transactions ────────────────
+  const todayStr = new Date().toISOString().split("T")[0];
+  const filterRange = (): { start?: string; end?: string } => {
+    if (filter === "currentSeason") {
+      return activeSeason ? { start: activeSeason.startDate, end: activeSeason.endDate } : {};
+    }
+    if (filter === "last30") {
+      const d = new Date(); d.setDate(d.getDate() - 30);
+      return { start: d.toISOString().split("T")[0], end: todayStr };
+    }
+    if (filter === "last90") {
+      const d = new Date(); d.setDate(d.getDate() - 90);
+      return { start: d.toISOString().split("T")[0], end: todayStr };
+    }
+    if (filter === "currentYear") {
+      const y = new Date().getFullYear();
+      return { start: `${y}-01-01`, end: `${y}-12-31` };
+    }
+    return {}; // allTime
+  };
+
+  const { start: rangeStart, end: rangeEnd } = filterRange();
+  const filteredTxns = filterByDateRange(allTxns, rangeStart, rangeEnd);
+
+  const income = sumByType(filteredTxns, ["income"]);
+  const expense = sumByType(filteredTxns, ["expense"]);
   const profit = income - expense;
+  const dealerDues = sumByType(filteredTxns, ["dealerPurchase"]) - sumByType(filteredTxns, ["dealerPayment"]);
+  const pendingLoans = sumByType(filteredTxns, ["loanTaken"]) - sumByType(filteredTxns, ["loanRepayment"]);
+
+  const recentLedger = [...allTxns]
+    .sort((a, b) => (b.date > a.date ? 1 : -1))
+    .slice(0, 5);
 
   // ── Summary cards ─────────────────────────────────────────────
   const cards = [
@@ -311,6 +339,38 @@ export default function OverviewPage() {
       {/* ── Summary Cards ─────────────────────────────────────── */}
       <div className="px-4 -mt-2">
         <div className="bg-white rounded-2xl p-4 shadow-md">
+          <div className="flex items-center justify-between mb-3 relative">
+            <p className="font-bold text-gray-800 text-sm">Overview</p>
+            <button
+              onClick={() => setShowFilterMenu((v) => !v)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium"
+              style={{ backgroundColor: "#E8F5E9", color: "#1B5E20" }}
+            >
+              {filterLabels[filter]}
+              <ChevronRight size={12} className="rotate-90" color="#1B5E20" />
+            </button>
+            {showFilterMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowFilterMenu(false)} />
+                <div className="absolute right-0 top-8 z-20 bg-white rounded-2xl shadow-lg border border-gray-100 py-2 w-48">
+                  {(Object.keys(filterLabels) as (keyof typeof filterLabels)[]).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => { setFilter(key); setShowFilterMenu(false); }}
+                      className="w-full text-left px-4 py-2 text-sm"
+                      style={{
+                        color: filter === key ? "#1B5E20" : "#374151",
+                        fontWeight: filter === key ? 700 : 400,
+                        backgroundColor: filter === key ? "#E8F5E9" : "transparent",
+                      }}
+                    >
+                      {filterLabels[key]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             {cards.map((card) => {
               const Icon = card.icon;
@@ -385,11 +445,18 @@ export default function OverviewPage() {
           </div>
           <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
             {recentLedger.map((entry, i) => {
-              const isCredit = entry.type === "credit";
-              const label = entry.categoryLabel || entry.category ||
-                (entry.sourceType
-                  ? entry.sourceType.charAt(0).toUpperCase() + entry.sourceType.slice(1)
-                  : "Transaction");
+              const CREDIT_TYPES = ["income", "loanTaken", "dealerPayment"];
+              const isCredit = CREDIT_TYPES.includes(entry.type);
+              const TYPE_LABELS: Record<string, string> = {
+                income: "Income",
+                expense: "Expense",
+                dealerPurchase: "Dealer Purchase",
+                dealerPayment: "Dealer Payment",
+                loanTaken: "Loan Taken",
+                loanRepayment: "Loan Repayment",
+                inventory: "Inventory",
+              };
+              const label = entry.categoryLabel || entry.category || entry.description || TYPE_LABELS[entry.type] || "Transaction";
               const fmtEntryDate = (dateStr: string) => {
                 if (!dateStr) return "";
                 const [, m, d] = dateStr.split("-");

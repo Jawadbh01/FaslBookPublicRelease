@@ -78,22 +78,7 @@ export async function runHarvestWorkflow(input: HarvestInput) {
     syncStatus: "synced",
   });
 
-  // ── 4. Create ledger entry ─────────────────────────────────
-  const ledgerRef = doc(collection(db, "ledgerEntries"));
-  batch.set(ledgerRef, {
-    id: ledgerRef.id,
-    organizationId: input.organizationId,
-    type: "harvest",
-    direction: "credit",
-    amount: 0,
-    description: `Harvest: ${input.quantity} ${input.unit} of ${input.cropName} from ${input.parcelName}`,
-    sourceId: input.cropId,
-    sourceType: "crop",
-    createdAt: now,
-    syncStatus: "synced",
-  });
-
-  // ── 5. Activity log ────────────────────────────────────────
+  // ── 4. Activity log ────────────────────────────────────────
   const logRef = doc(collection(db, "activityLogs"));
   batch.set(logRef, {
     id: logRef.id,

@@ -11,12 +11,22 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase/config";
 import { compressImage } from "@/lib/utils/compressImage";
 import { useAuthStore } from "@/store/authStore";
+import { ensureDefaultSeason } from "@/lib/firebase/seasons";
+import type { TransactionType } from "@/lib/firebase/transactions";
 import {
   ArrowLeft, Plus, TrendingUp, TrendingDown,
   ChevronLeft, ChevronRight, Loader2, CheckCircle,
   MapPin, Camera, X, Receipt, Printer,
 } from "lucide-react";
 import { useLocation } from "wouter";
+
+// Maps the unified Transaction.type into the credit/debit convention this
+// screen (and its totals) already use — same convention the old
+// ledgerEntries direction fields used, so Khata math/behaviour is unchanged.
+const CREDIT_TYPES: TransactionType[] = ["income", "loanTaken", "dealerPayment"];
+function txnToCreditDebit(type: TransactionType): "credit" | "debit" {
+  return CREDIT_TYPES.includes(type) ? "credit" : "debit";
+}
 
 // ── Types ──────────────────────────────────────────────────────
 interface LedgerEntry {
@@ -178,8 +188,14 @@ export default function LedgerPage() {
     if (!orgId) return;
     const unsubs: (() => void)[] = [];
     unsubs.push(onSnapshot(
-      query(collection(db, "ledgerEntries"), where("organizationId", "==", orgId)),
-      (snap) => { setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry))); setLoading(false); }
+      query(collection(db, "transactions"), where("organizationId", "==", orgId)),
+      (snap) => {
+        setEntries(snap.docs.map((d) => {
+          const data = d.data() as any;
+          return { id: d.id, ...data, type: txnToCreditDebit(data.type) } as LedgerEntry;
+        }));
+        setLoading(false);
+      }
     ));
     unsubs.push(onSnapshot(
       query(collection(db, "parcels"), where("organizationId", "==", orgId)),
@@ -240,12 +256,15 @@ export default function LedgerPage() {
     try {
       setSaving(true); setFormError("");
 
+      const season = await ensureDefaultSeason(orgId!);
+
       // 1. Save entry to Firestore immediately (no photo URL yet)
-      const docRef = await addDoc(collection(db, "ledgerEntries"), {
-        organizationId: orgId, type: "credit",
+      const docRef = await addDoc(collection(db, "transactions"), {
+        organizationId: orgId, seasonId: season.id, type: "income",
         category: incomeForm.type,
         categoryLabel: incomeTypes[incomeForm.type]?.label || incomeForm.type,
         amount: Number(incomeForm.amount), date: incomeForm.date,
+        description: incomeTypes[incomeForm.type]?.label || incomeForm.type,
         parcelId: incomeForm.parcelId || "", parcelName: parcel?.name || "",
         farmerId: incomeForm.farmerId || "", farmerName: farmer?.name || "",
         notes: incomeForm.notes, proofUrl: "",
@@ -264,7 +283,7 @@ export default function LedgerPage() {
         uploadPhoto(incomeProofFile, `proofs/${orgId}/${docRef.id}_proof.jpg`)
           .then((url) => {
             import("firebase/firestore").then(({ doc: fsDoc, updateDoc }) => {
-              updateDoc(fsDoc(db, "ledgerEntries", docRef.id), { proofUrl: url }).catch(console.error);
+              updateDoc(fsDoc(db, "transactions", docRef.id), { proofUrl: url }).catch(console.error);
             });
           })
           .catch(console.error);
@@ -289,12 +308,15 @@ export default function LedgerPage() {
     try {
       setSaving(true); setFormError("");
 
+      const season = await ensureDefaultSeason(orgId!);
+
       // 1. Save entry to Firestore immediately (no receipt URL yet)
-      const docRef = await addDoc(collection(db, "ledgerEntries"), {
-        organizationId: orgId, type: "debit",
+      const docRef = await addDoc(collection(db, "transactions"), {
+        organizationId: orgId, seasonId: season.id, type: "expense",
         category: expenseForm.category,
         categoryLabel: expenseCategories[expenseForm.category]?.label || expenseForm.category,
         amount: Number(expenseForm.amount), date: expenseForm.date,
+        description: expenseCategories[expenseForm.category]?.label || expenseForm.category,
         parcelId: expenseForm.parcelId || "", parcelName: parcel?.name || "",
         dealerId: expenseForm.dealerId || "", dealerName: dealer?.name || "",
         farmerId: expenseForm.farmerId || "", farmerName: farmer?.name || "",
@@ -314,7 +336,7 @@ export default function LedgerPage() {
         uploadPhoto(receiptFile, `receipts/${orgId}/${docRef.id}_receipt.jpg`)
           .then((url) => {
             import("firebase/firestore").then(({ doc: fsDoc, updateDoc }) => {
-              updateDoc(fsDoc(db, "ledgerEntries", docRef.id), { receiptUrl: url }).catch(console.error);
+              updateDoc(fsDoc(db, "transactions", docRef.id), { receiptUrl: url }).catch(console.error);
             });
           })
           .catch(console.error);
@@ -625,7 +647,7 @@ export default function LedgerPage() {
           if (!editForm.amount || Number(editForm.amount) <= 0) return;
           setEditSaving(true);
           try {
-            await updateDoc(doc(db, "ledgerEntries", detailEntry.id), {
+            await updateDoc(doc(db, "transactions", detailEntry.id), {
               amount: Number(editForm.amount),
               date: editForm.date,
               notes: editForm.notes,

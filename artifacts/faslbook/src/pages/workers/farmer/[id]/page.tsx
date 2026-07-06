@@ -9,6 +9,8 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { addTransaction } from "@/lib/firebase/transactions";
+import { ensureDefaultSeason } from "@/lib/firebase/seasons";
 import {
   ChevronLeft, MapPin, Package, BarChart2, Receipt, TrendingUp, TrendingDown,
   Plus, X, Loader2, CheckCircle,
@@ -64,7 +66,7 @@ interface InvTx {
 
 interface LedgerEntry {
   id: string;
-  type: "credit" | "debit";
+  type: "income" | "expense";
   category: string;
   categoryLabel?: string;
   amount: number;
@@ -147,21 +149,21 @@ export default function FarmerDetailPage() {
     const parcel = parcels.find((p) => p.id === addForm.parcelId);
     try {
       setAddSaving(true); setAddError("");
-      await addDoc(collection(db, "ledgerEntries"), {
+      const season = await ensureDefaultSeason(orgId);
+      await addTransaction({
         organizationId: orgId,
-        type: addType,
+        seasonId: season.id,
+        type: addType === "credit" ? "income" : "expense",
         category: addForm.category,
         categoryLabel: cfg?.label || addForm.category,
         amount: Number(addForm.amount),
         date: addForm.date,
+        description: addForm.notes || cfg?.label || addForm.category,
         parcelId: addForm.parcelId || "",
         parcelName: parcel?.name || "",
         farmerId: farmer.id,
         farmerName: farmer.displayName,
         notes: addForm.notes,
-        createdBy: auth.currentUser?.uid || "",
-        createdAt: serverTimestamp(),
-        syncStatus: "synced",
       });
       addDoc(collection(db, "activityLogs"), {
         organizationId: orgId, userId: auth.currentUser?.uid || "", userName: auth.currentUser?.displayName || "",
@@ -237,11 +239,15 @@ export default function FarmerDetailPage() {
     const parcelIds = parcels.map((p) => p.id).slice(0, 30);
     const unsub = onSnapshot(
       query(
-        collection(db, "ledgerEntries"),
+        collection(db, "transactions"),
         where("organizationId", "==", orgId),
         where("parcelId", "in", parcelIds)
       ),
-      (snap) => setParcelLedger(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry)))
+      (snap) => setParcelLedger(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as LedgerEntry))
+          .filter((e) => e.type === "income" || e.type === "expense")
+      )
     );
     return () => unsub();
   }, [orgId, parcels]);
@@ -250,11 +256,15 @@ export default function FarmerDetailPage() {
     if (!orgId || !id) { setFarmerLedger([]); return; }
     const unsub = onSnapshot(
       query(
-        collection(db, "ledgerEntries"),
+        collection(db, "transactions"),
         where("organizationId", "==", orgId),
         where("farmerId", "==", id)
       ),
-      (snap) => setFarmerLedger(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LedgerEntry)))
+      (snap) => setFarmerLedger(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as LedgerEntry))
+          .filter((e) => e.type === "income" || e.type === "expense")
+      )
     );
     return () => unsub();
   }, [orgId, id]);
@@ -269,8 +279,8 @@ export default function FarmerDetailPage() {
   const harvestedCrops = crops.filter((c) => c.status === "harvested");
 
   const sortedLedger = [...ledgerEntries].sort((a, b) => (a.date < b.date ? 1 : -1));
-  const totalCredit = ledgerEntries.filter((e) => e.type === "credit").reduce((s, e) => s + (e.amount || 0), 0);
-  const totalDebit = ledgerEntries.filter((e) => e.type === "debit").reduce((s, e) => s + (e.amount || 0), 0);
+  const totalCredit = ledgerEntries.filter((e) => e.type === "income").reduce((s, e) => s + (e.amount || 0), 0);
+  const totalDebit = ledgerEntries.filter((e) => e.type === "expense").reduce((s, e) => s + (e.amount || 0), 0);
   const fmtRs = (n: number) => "Rs. " + n.toLocaleString("en-PK");
 
   const ini = farmer?.displayName?.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "?";
@@ -401,8 +411,8 @@ export default function FarmerDetailPage() {
                     <p className="text-gray-800 font-medium text-sm">{e.categoryLabel || e.category}</p>
                     <p className="text-gray-400 text-xs">{e.parcelName || "—"} · {e.date}</p>
                   </div>
-                  <p className="font-semibold text-sm" style={{ color: e.type === "credit" ? "#1B5E20" : "#C62828" }}>
-                    {e.type === "credit" ? "+" : "-"}{fmtRs(e.amount)}
+                  <p className="font-semibold text-sm" style={{ color: e.type === "income" ? "#1B5E20" : "#C62828" }}>
+                    {e.type === "income" ? "+" : "-"}{fmtRs(e.amount)}
                   </p>
                 </div>
               ))}
