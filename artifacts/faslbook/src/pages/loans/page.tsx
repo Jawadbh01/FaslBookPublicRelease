@@ -7,7 +7,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
-import { ensureDefaultSeason } from "@/lib/firebase/seasons";
+import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import {
   Plus, X, Loader2, User,
   Building2, Users, HandCoins,
@@ -58,9 +58,12 @@ export default function LoansPage() {
     amount: "",
     borrowDate: new Date().toISOString().split("T")[0],
     dueDate: "",
+    cropCycleId: "",
     notes: "",
   });
 
+  const [payCropCycleId, setPayCropCycleId] = useState("");
+  const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
   const [repayments, setRepayments] = useState<{ id: string; loanId: string; amount: number }[]>([]);
 
   useEffect(() => {
@@ -87,6 +90,18 @@ export default function LoansPage() {
     return () => unsub();
   }, [orgId]);
 
+  useEffect(() => {
+    if (!orgId) return;
+    return subscribeCropCycles(orgId, setCropCycles);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (cropCycles.length === 0) return;
+    const active = cropCycles.find((c) => c.status === "Active") || cropCycles[0];
+    setForm((f) => (f.cropCycleId ? f : { ...f, cropCycleId: active.id }));
+    setPayCropCycleId((id) => (id ? id : active.id));
+  }, [cropCycles]);
+
   const paidAmountFor = (loanId: string) =>
     repayments.filter((r) => r.loanId === loanId).reduce((s, r) => s + (r.amount || 0), 0);
 
@@ -104,11 +119,12 @@ export default function LoansPage() {
   const handleSaveLoan = async () => {
     if (!form.lenderName) { setError("Lender name is required"); return; }
     if (!form.amount || isNaN(Number(form.amount))) { setError("Enter valid amount"); return; }
+    if (!form.cropCycleId) { setError("Please select a crop cycle"); return; }
     try {
       setSaving(true);
       setError("");
       const amount = Number(form.amount);
-      const season = await ensureDefaultSeason(orgId!);
+      const cropCycle = cropCycles.find((c) => c.id === form.cropCycleId);
       const loanRef = await addDoc(collection(db, "loans"), {
         lenderName: form.lenderName.trim(),
         lenderType: form.lenderType,
@@ -124,7 +140,10 @@ export default function LoansPage() {
 
       await addDoc(collection(db, "transactions"), {
         organizationId: orgId,
-        seasonId: season.id,
+        cropCycleId: form.cropCycleId,
+        cropCycleName: cropCycle?.name || "",
+        seasonId: cropCycle?.seasonId || "",
+        seasonName: cropCycle?.seasonName || "",
         type: "loanTaken",
         loanId: loanRef.id,
         amount,
@@ -152,7 +171,9 @@ export default function LoansPage() {
       setForm({
         lenderName: "", lenderType: "person",
         amount: "", borrowDate: new Date().toISOString().split("T")[0],
-        dueDate: "", notes: "",
+        dueDate: "",
+        cropCycleId: (cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "",
+        notes: "",
       });
     } catch {
       setError("Failed to save loan.");
@@ -163,6 +184,7 @@ export default function LoansPage() {
 
   const handlePayment = async () => {
     if (!payAmount || isNaN(Number(payAmount))) { setError("Enter valid amount"); return; }
+    if (!payCropCycleId) { setError("Please select a crop cycle"); return; }
     if (!selectedLoan) return;
     const amount = Number(payAmount);
     const remaining = (selectedLoan.amount || 0) - paidAmountFor(selectedLoan.id);
@@ -171,11 +193,14 @@ export default function LoansPage() {
     try {
       setSaving(true);
       setError("");
-      const season = await ensureDefaultSeason(orgId!);
+      const cropCycle = cropCycles.find((c) => c.id === payCropCycleId);
 
       await addDoc(collection(db, "transactions"), {
         organizationId: orgId,
-        seasonId: season.id,
+        cropCycleId: payCropCycleId,
+        cropCycleName: cropCycle?.name || "",
+        seasonId: cropCycle?.seasonId || "",
+        seasonName: cropCycle?.seasonName || "",
         type: "loanRepayment",
         loanId: selectedLoan.id,
         amount,
@@ -303,6 +328,20 @@ export default function LoansPage() {
             </div>
           </div>
 
+          <div className="mb-4">
+            <label className="text-gray-600 text-sm font-medium mb-2 block">Crop Cycle *</label>
+            <div className="border-2 border-gray-200 rounded-2xl px-4 py-3 focus-within:border-green-700 bg-white">
+              <select
+                value={form.cropCycleId}
+                onChange={(e) => setForm({ ...form, cropCycleId: e.target.value })}
+                className="w-full outline-none text-gray-800 text-base bg-transparent"
+              >
+                <option value="">— Select crop cycle —</option>
+                {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+              </select>
+            </div>
+          </div>
+
           <div className="mb-8">
             <label className="text-gray-600 text-sm font-medium mb-2 block">Notes</label>
             <div className="border-2 border-gray-200 rounded-2xl px-4 py-3">
@@ -362,6 +401,19 @@ export default function LoansPage() {
                 onChange={(e) => setPayAmount(e.target.value)}
                 className="flex-1 outline-none text-gray-800 text-base bg-transparent"
               />
+            </div>
+          </div>
+          <div className="mb-4">
+            <label className="text-gray-600 text-sm font-medium mb-2 block">Crop Cycle *</label>
+            <div className="border-2 border-gray-200 rounded-2xl px-4 py-3 focus-within:border-green-700 bg-white">
+              <select
+                value={payCropCycleId}
+                onChange={(e) => setPayCropCycleId(e.target.value)}
+                className="w-full outline-none text-gray-800 text-base bg-transparent"
+              >
+                <option value="">— Select crop cycle —</option>
+                {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+              </select>
             </div>
           </div>
           <div className="mb-8">

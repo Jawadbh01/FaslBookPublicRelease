@@ -10,8 +10,8 @@ import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { useLocation } from "wouter";
 import { useLangStore } from "@/store/langStore";
-import { subscribeSeasons, getActiveSeason, type Season } from "@/lib/firebase/seasons";
-import { subscribeTransactions, sumByType, filterByDateRange, type Transaction } from "@/lib/firebase/transactions";
+import { subscribeCropCycles, getCurrentCropCycle, type CropCycle } from "@/lib/firebase/cropCycles";
+import { subscribeTransactions, sumByType, filterByDateRange, filterByCropCycle, type Transaction } from "@/lib/firebase/transactions";
 import {
   TrendingUp, TrendingDown, Wallet,
   Package, Plus, ArrowUpRight,
@@ -78,16 +78,16 @@ export default function OverviewPage() {
   const [loading, setLoading]             = useState(true);
   const [copied, setCopied]               = useState(false);
 
-  // Overview filter — recalculates Income/Expense/Profit/Dealer Dues/Loan Dues live.
-  type FilterKey = "currentSeason" | "last30" | "last90" | "currentYear" | "allTime";
-  const [filter, setFilter] = useState<FilterKey>("currentSeason");
+  // Overview filter — recalculates Income/Expense/Profit/Inventory/Dealer Dues/Loan Dues live.
+  type FilterKey = "currentCropCycle" | "last30" | "last90" | "currentYear" | "allTime";
+  const [filter, setFilter] = useState<FilterKey>("currentCropCycle");
   const [showFilterMenu, setShowFilterMenu] = useState(false);
-  const [seasons, setSeasons] = useState<Season[]>([]);
-  const [activeSeason, setActiveSeason] = useState<Season | null>(null);
+  const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
+  const [currentCropCycle, setCurrentCropCycle] = useState<CropCycle | null>(null);
   const [allTxns, setAllTxns] = useState<Transaction[]>([]);
 
   const filterLabels: Record<FilterKey, string> = {
-    currentSeason: "Current Season",
+    currentCropCycle: currentCropCycle ? `${currentCropCycle.name}` : "Current Crop Cycle",
     last30: "Last 30 Days",
     last90: "Last 90 Days",
     currentYear: "Current Year",
@@ -112,8 +112,8 @@ export default function OverviewPage() {
     const unsubs: (() => void)[] = [];
 
     unsubs.push(subscribeTransactions(orgId, setAllTxns));
-    unsubs.push(subscribeSeasons(orgId, setSeasons));
-    getActiveSeason(orgId).then(setActiveSeason);
+    unsubs.push(subscribeCropCycles(orgId, setCropCycles));
+    getCurrentCropCycle(orgId).then(setCurrentCropCycle);
 
     unsubs.push(onSnapshot(
       query(collection(db, "inventoryItems"), where("organizationId", "==", orgId)),
@@ -146,12 +146,9 @@ export default function OverviewPage() {
     return () => unsubs.forEach((u) => u());
   }, [orgId, role]);
 
-  // ── Filter → date range → filtered transactions ────────────────
+  // ── Filter → filtered transactions ──────────────────────────────
   const todayStr = new Date().toISOString().split("T")[0];
   const filterRange = (): { start?: string; end?: string } => {
-    if (filter === "currentSeason") {
-      return activeSeason ? { start: activeSeason.startDate, end: activeSeason.endDate } : {};
-    }
     if (filter === "last30") {
       const d = new Date(); d.setDate(d.getDate() - 30);
       return { start: d.toISOString().split("T")[0], end: todayStr };
@@ -164,11 +161,12 @@ export default function OverviewPage() {
       const y = new Date().getFullYear();
       return { start: `${y}-01-01`, end: `${y}-12-31` };
     }
-    return {}; // allTime
+    return {}; // allTime / currentCropCycle (handled separately below)
   };
 
-  const { start: rangeStart, end: rangeEnd } = filterRange();
-  const filteredTxns = filterByDateRange(allTxns, rangeStart, rangeEnd);
+  const filteredTxns = filter === "currentCropCycle"
+    ? filterByCropCycle(allTxns, currentCropCycle?.id)
+    : filterByDateRange(allTxns, filterRange().start, filterRange().end);
 
   const income = sumByType(filteredTxns, ["income"]);
   const expense = sumByType(filteredTxns, ["expense"]);
@@ -205,6 +203,14 @@ export default function OverviewPage() {
       color: "#1B5E20",
       bg: "#E8F5E9",
       href: "/ledger?form=income",
+    },
+    {
+      label: "Crop Cycles",
+      urdu: "فصل",
+      icon: Wheat,
+      color: "#1B5E20",
+      bg: "#E8F5E9",
+      href: "/seasons",
     },
     {
       label: "My Land",

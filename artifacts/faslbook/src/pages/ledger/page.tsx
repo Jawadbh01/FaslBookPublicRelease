@@ -11,7 +11,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase/config";
 import { compressImage } from "@/lib/utils/compressImage";
 import { useAuthStore } from "@/store/authStore";
-import { ensureDefaultSeason } from "@/lib/firebase/seasons";
+import { ensureDefaultCropCycle, subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import type { TransactionType } from "@/lib/firebase/transactions";
 import {
   ArrowLeft, Plus, TrendingUp, TrendingDown,
@@ -143,6 +143,7 @@ export default function LedgerPage() {
   const [parcels, setParcels] = useState<Parcel[]>([]);
   const [dealers, setDealers] = useState<Dealer[]>([]);
   const [farmers, setFarmers] = useState<FarmerOpt[]>([]);
+  const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
   const [loading, setLoading] = useState(true);
 
   // ── UI ─────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ export default function LedgerPage() {
 
   // ── Income form ────────────────────────────────────────────
   const [incomeForm, setIncomeForm] = useState({
-    type: "cropSale", amount: "", date: todayStr(), parcelId: "", farmerId: "", notes: "",
+    type: "cropSale", amount: "", date: todayStr(), parcelId: "", farmerId: "", cropCycleId: "", seasonId: "", notes: "",
   });
   const [incomeProofFile, setIncomeProofFile]       = useState<File | null>(null);
   const [incomeProofPreview, setIncomeProofPreview] = useState("");
@@ -177,7 +178,7 @@ export default function LedgerPage() {
 
   // ── Expense form ───────────────────────────────────────────
   const [expenseForm, setExpenseForm] = useState({
-    category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", notes: "",
+    category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", cropCycleId: "", seasonId: "", notes: "",
   });
   const [receiptFile, setReceiptFile]       = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState("");
@@ -213,8 +214,27 @@ export default function LedgerPage() {
           .sort((a, b) => a.name.localeCompare(b.name))
       )
     ));
+    unsubs.push(subscribeCropCycles(orgId, setCropCycles));
     return () => unsubs.forEach((u) => u());
   }, [orgId]);
+
+  // Default every new form to the current crop cycle so the field isn't
+  // blank on first open; still fully editable before saving.
+  useEffect(() => {
+    if (cropCycles.length === 0) return;
+    const active = cropCycles.find((c) => c.status === "Active") || cropCycles[0];
+    setIncomeForm((f) => f.cropCycleId ? f : { ...f, cropCycleId: active.id, seasonId: active.seasonId || "" });
+    setExpenseForm((f) => f.cropCycleId ? f : { ...f, cropCycleId: active.id, seasonId: active.seasonId || "" });
+  }, [cropCycles]);
+
+  const onIncomeCropCycleChange = (id: string) => {
+    const c = cropCycles.find((cc) => cc.id === id);
+    setIncomeForm((f) => ({ ...f, cropCycleId: id, seasonId: c?.seasonId || "" }));
+  };
+  const onExpenseCropCycleChange = (id: string) => {
+    const c = cropCycles.find((cc) => cc.id === id);
+    setExpenseForm((f) => ({ ...f, cropCycleId: id, seasonId: c?.seasonId || "" }));
+  };
 
   // ── Derived stats ──────────────────────────────────────────
   const monthEntries = entries.filter((e) => {
@@ -231,9 +251,10 @@ export default function LedgerPage() {
   const nextMonth = () => setViewMonth((m) => m.month === 11 ? { year: m.year + 1, month: 0 } : { year: m.year, month: m.month + 1 });
 
   const resetForms = () => {
-    setIncomeForm({ type: "cropSale", amount: "", date: todayStr(), parcelId: "", farmerId: "", notes: "" });
+    const active = cropCycles.find((c) => c.status === "Active") || cropCycles[0];
+    setIncomeForm({ type: "cropSale", amount: "", date: todayStr(), parcelId: "", farmerId: "", cropCycleId: active?.id || "", seasonId: active?.seasonId || "", notes: "" });
     setIncomeProofFile(null); setIncomeProofPreview(""); incomeLocation.reset();
-    setExpenseForm({ category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", notes: "" });
+    setExpenseForm({ category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", cropCycleId: active?.id || "", seasonId: active?.seasonId || "", notes: "" });
     setReceiptFile(null); setReceiptPreview(""); expenseLocation.reset();
     setFormError(""); setSuccess(false);
   };
@@ -251,22 +272,26 @@ export default function LedgerPage() {
   const handleAddIncome = async () => {
     if (!incomeForm.amount || Number(incomeForm.amount) <= 0) { setFormError("Enter a valid amount"); return; }
     if (!incomeForm.date) { setFormError("Select a date"); return; }
+    if (!incomeForm.farmerId) { setFormError("Select a farmer"); return; }
+    if (!incomeForm.parcelId) { setFormError("Select a parcel"); return; }
+    if (!incomeForm.cropCycleId) { setFormError("Select a crop cycle"); return; }
     const parcel = parcels.find((p) => p.id === incomeForm.parcelId);
     const farmer = farmers.find((f) => f.id === incomeForm.farmerId);
+    const cropCycle = cropCycles.find((c) => c.id === incomeForm.cropCycleId);
     try {
       setSaving(true); setFormError("");
 
-      const season = await ensureDefaultSeason(orgId!);
-
       // 1. Save entry to Firestore immediately (no photo URL yet)
       const docRef = await addDoc(collection(db, "transactions"), {
-        organizationId: orgId, seasonId: season.id, type: "income",
+        organizationId: orgId, type: "income",
+        cropCycleId: incomeForm.cropCycleId, cropCycleName: cropCycle?.name || "",
+        seasonId: incomeForm.seasonId || "", seasonName: cropCycle?.seasonName || "",
         category: incomeForm.type,
         categoryLabel: incomeTypes[incomeForm.type]?.label || incomeForm.type,
         amount: Number(incomeForm.amount), date: incomeForm.date,
         description: incomeTypes[incomeForm.type]?.label || incomeForm.type,
-        parcelId: incomeForm.parcelId || "", parcelName: parcel?.name || "",
-        farmerId: incomeForm.farmerId || "", farmerName: farmer?.name || "",
+        parcelId: incomeForm.parcelId, parcelName: parcel?.name || "",
+        farmerId: incomeForm.farmerId, farmerName: farmer?.name || "",
         notes: incomeForm.notes, proofUrl: "",
         location: incomeLocation.location || null,
         createdBy: auth.currentUser?.uid || "",
@@ -302,24 +327,28 @@ export default function LedgerPage() {
   const handleAddExpense = async () => {
     if (!expenseForm.amount || Number(expenseForm.amount) <= 0) { setFormError("Enter a valid amount"); return; }
     if (!expenseForm.date) { setFormError("Select a date"); return; }
+    if (!expenseForm.farmerId) { setFormError("Select a farmer"); return; }
+    if (!expenseForm.parcelId) { setFormError("Select a parcel"); return; }
+    if (!expenseForm.cropCycleId) { setFormError("Select a crop cycle"); return; }
     const parcel = parcels.find((p) => p.id === expenseForm.parcelId);
     const dealer = dealers.find((d) => d.id === expenseForm.dealerId);
     const farmer = farmers.find((f) => f.id === expenseForm.farmerId);
+    const cropCycle = cropCycles.find((c) => c.id === expenseForm.cropCycleId);
     try {
       setSaving(true); setFormError("");
 
-      const season = await ensureDefaultSeason(orgId!);
-
       // 1. Save entry to Firestore immediately (no receipt URL yet)
       const docRef = await addDoc(collection(db, "transactions"), {
-        organizationId: orgId, seasonId: season.id, type: "expense",
+        organizationId: orgId, type: "expense",
+        cropCycleId: expenseForm.cropCycleId, cropCycleName: cropCycle?.name || "",
+        seasonId: expenseForm.seasonId || "", seasonName: cropCycle?.seasonName || "",
         category: expenseForm.category,
         categoryLabel: expenseCategories[expenseForm.category]?.label || expenseForm.category,
         amount: Number(expenseForm.amount), date: expenseForm.date,
         description: expenseCategories[expenseForm.category]?.label || expenseForm.category,
-        parcelId: expenseForm.parcelId || "", parcelName: parcel?.name || "",
+        parcelId: expenseForm.parcelId, parcelName: parcel?.name || "",
         dealerId: expenseForm.dealerId || "", dealerName: dealer?.name || "",
-        farmerId: expenseForm.farmerId || "", farmerName: farmer?.name || "",
+        farmerId: expenseForm.farmerId, farmerName: farmer?.name || "",
         notes: expenseForm.notes, receiptUrl: "",
         location: expenseLocation.location || null,
         createdBy: auth.currentUser?.uid || "",
@@ -416,22 +445,44 @@ export default function LedgerPage() {
           </span>
         </div>
 
+        {/* Crop Cycle — required, drives Season auto-fill */}
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Crop Cycle</label>
+        <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
+          <select value={incomeForm.cropCycleId} onChange={(e) => onIncomeCropCycleChange(e.target.value)}
+            className="w-full outline-none text-gray-800 text-base bg-transparent">
+            <option value="">— Select crop cycle —</option>
+            {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+          </select>
+        </div>
+
+        {/* Season — auto-filled from crop cycle, editable */}
+        {cropCycles.length > 0 && (
+          <>
+            <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Season (auto-filled, editable)</label>
+            <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
+              <input type="text" value={incomeForm.seasonId ? (cropCycles.find(c=>c.id===incomeForm.cropCycleId)?.seasonName || "") : ""}
+                readOnly
+                className="w-full outline-none text-gray-500 text-base bg-transparent" placeholder="No season linked" />
+            </div>
+          </>
+        )}
+
         {/* Parcel */}
-        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Select Parcel</label>
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Parcel</label>
         <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
           <select value={incomeForm.parcelId} onChange={(e) => setIncomeForm({ ...incomeForm, parcelId: e.target.value })}
             className="w-full outline-none text-gray-800 text-base bg-transparent">
-            <option value="">— No parcel —</option>
+            <option value="">— Select parcel —</option>
             {parcels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
 
         {/* Farmer — links this entry to a farmer's own Khata */}
-        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Farmer (Optional)</label>
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Farmer</label>
         <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
           <select value={incomeForm.farmerId} onChange={(e) => setIncomeForm({ ...incomeForm, farmerId: e.target.value })}
             className="w-full outline-none text-gray-800 text-base bg-transparent">
-            <option value="">— No farmer —</option>
+            <option value="">— Select farmer —</option>
             {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </div>
@@ -532,22 +583,44 @@ export default function LedgerPage() {
           </span>
         </div>
 
+        {/* Crop Cycle — required, drives Season auto-fill */}
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Crop Cycle</label>
+        <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
+          <select value={expenseForm.cropCycleId} onChange={(e) => onExpenseCropCycleChange(e.target.value)}
+            className="w-full outline-none text-gray-800 text-base bg-transparent">
+            <option value="">— Select crop cycle —</option>
+            {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+          </select>
+        </div>
+
+        {/* Season — auto-filled from crop cycle, editable */}
+        {cropCycles.length > 0 && (
+          <>
+            <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Season (auto-filled, editable)</label>
+            <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
+              <input type="text" value={expenseForm.seasonId ? (cropCycles.find(c=>c.id===expenseForm.cropCycleId)?.seasonName || "") : ""}
+                readOnly
+                className="w-full outline-none text-gray-500 text-base bg-transparent" placeholder="No season linked" />
+            </div>
+          </>
+        )}
+
         {/* Parcel */}
         <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Parcel</label>
         <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
           <select value={expenseForm.parcelId} onChange={(e) => setExpenseForm({ ...expenseForm, parcelId: e.target.value })}
             className="w-full outline-none text-gray-800 text-base bg-transparent">
-            <option value="">— No parcel —</option>
+            <option value="">— Select parcel —</option>
             {parcels.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
 
         {/* Farmer — links this entry to a farmer's own Khata */}
-        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Farmer (Optional)</label>
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Farmer</label>
         <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
           <select value={expenseForm.farmerId} onChange={(e) => setExpenseForm({ ...expenseForm, farmerId: e.target.value })}
             className="w-full outline-none text-gray-800 text-base bg-transparent">
-            <option value="">— No farmer —</option>
+            <option value="">— Select farmer —</option>
             {farmers.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </div>

@@ -4,6 +4,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { migrateOrgToTransactions } from "@/lib/migration/migrateToTransactions";
+import { migrateSeasonsToCropCycles } from "@/lib/migration/migrateSeasonsToCropCycles";
 
 // Pages a fully-onboarded, cached user should be bounced away from straight to /overview.
 const AUTH_PAGES = ["/login", "/email", "/register"];
@@ -150,6 +151,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         if (orgData && !orgData.transactionsMigrated) {
           migrateOrgToTransactions(userData.organizationId).catch((err) =>
             console.error("[AuthProvider] transactions migration failed", err)
+          );
+        }
+
+        // Fire-and-forget one-time migration of Seasons into Crop Cycles
+        // (Season-first -> Crop Cycle-first). Never blocks sign-in/navigation.
+        if (orgData && !orgData.cropCyclesMigrated) {
+          migrateSeasonsToCropCycles(userData.organizationId).catch((err) =>
+            console.error("[AuthProvider] crop cycles migration failed", err)
           );
         }
 

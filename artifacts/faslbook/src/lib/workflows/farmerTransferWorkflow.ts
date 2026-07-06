@@ -3,7 +3,7 @@ import {
   serverTimestamp, getDoc, increment,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
-import { ensureDefaultSeason } from "@/lib/firebase/seasons";
+import { getCropCycle } from "@/lib/firebase/cropCycles";
 
 interface FarmerTransferInput {
   itemId: string;
@@ -15,10 +15,11 @@ interface FarmerTransferInput {
   organizationId: string;
   notes: string;
   pricePerUnit?: number;
+  cropCycleId: string;
 }
 
 export async function runFarmerTransferWorkflow(input: FarmerTransferInput) {
-  const season = await ensureDefaultSeason(input.organizationId);
+  const cropCycle = await getCropCycle(input.organizationId, input.cropCycleId);
   const batch = writeBatch(db);
   const user = auth.currentUser;
   const now = serverTimestamp();
@@ -83,7 +84,10 @@ export async function runFarmerTransferWorkflow(input: FarmerTransferInput) {
     batch.set(txnRef, {
       id: txnRef.id,
       organizationId: input.organizationId,
-      seasonId: season.id,
+      cropCycleId: input.cropCycleId,
+      cropCycleName: cropCycle?.name || "",
+      seasonId: cropCycle?.seasonId || "",
+      seasonName: cropCycle?.seasonName || "",
       type: "expense",
       category: "stockTransfer",
       categoryLabel: "Godown Transfer",

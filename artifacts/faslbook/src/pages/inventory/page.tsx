@@ -8,6 +8,7 @@ import {
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { runFarmerTransferWorkflow } from "@/lib/workflows/farmerTransferWorkflow";
+import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import { categoryConfig } from "./_categoryConfig";
 import {
   ArrowLeft, Plus, X, ArrowDownToLine, ArrowUpFromLine,
@@ -65,7 +66,8 @@ export default function GodownPage() {
   const [itemForm, setItemForm] = useState({ name: "", category: "seed", unit: "Maund", initialStock: "", pricePerUnit: "" });
   const [inForm,  setInForm]    = useState({ quantity: "", source: "Purchase", notes: "" });
   const [outForm, setOutForm]   = useState({ quantity: "", reason: "Sale", notes: "" });
-  const [txForm,  setTxForm]    = useState({ farmerId: "", quantity: "", notes: "" });
+  const [txForm,  setTxForm]    = useState({ farmerId: "", quantity: "", cropCycleId: "", notes: "" });
+  const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
 
   // ── Listeners ──────────────────────────────────────────────
   useEffect(() => {
@@ -94,6 +96,17 @@ export default function GodownPage() {
     return () => unsubs.forEach((u) => u());
   }, [orgId]);
 
+  useEffect(() => {
+    if (!orgId) return;
+    return subscribeCropCycles(orgId, setCropCycles);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (cropCycles.length === 0) return;
+    const active = cropCycles.find((c) => c.status === "Active") || cropCycles[0];
+    setTxForm((f) => (f.cropCycleId ? f : { ...f, cropCycleId: active.id }));
+  }, [cropCycles]);
+
   // ── Derived stats ──────────────────────────────────────────
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
@@ -111,7 +124,7 @@ export default function GodownPage() {
     setItemForm({ name: "", category: "seed", unit: "Maund", initialStock: "", pricePerUnit: "" });
     setInForm({ quantity: "", source: "Purchase", notes: "" });
     setOutForm({ quantity: "", reason: "Sale", notes: "" });
-    setTxForm({ farmerId: "", quantity: "", notes: "" });
+    setTxForm({ farmerId: "", quantity: "", cropCycleId: (cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "", notes: "" });
     setFormError(""); setSuccess(false); setSelected(null);
   };
   const goBack = () => { setView("list"); resetAll(); };
@@ -189,6 +202,7 @@ export default function GodownPage() {
   const handleTransfer = async () => {
     if (!txForm.farmerId) { setFormError("Select a farmer"); return; }
     if (!txForm.quantity || Number(txForm.quantity) <= 0) { setFormError("Enter a valid quantity"); return; }
+    if (!txForm.cropCycleId) { setFormError("Please select a crop cycle"); return; }
     if (!selected) return;
     if (Number(txForm.quantity) > selected.currentStock) {
       setFormError(`Only ${selected.currentStock} ${selected.unit} available`); return;
@@ -201,6 +215,7 @@ export default function GodownPage() {
         quantity: Number(txForm.quantity), farmerId: txForm.farmerId,
         farmerName: farmer?.name || "", organizationId: orgId!, notes: txForm.notes,
         pricePerUnit: selected.pricePerUnit || 0,
+        cropCycleId: txForm.cropCycleId,
       });
       setSuccessMsg({ title: "Transfer Done! 📦", sub: `${txForm.quantity} ${selected.unit} → ${farmer?.name}` });
       setSuccess(true);
@@ -453,6 +468,15 @@ export default function GodownPage() {
             onChange={(e) => setTxForm({ ...txForm, quantity: e.target.value })}
             className="flex-1 outline-none text-gray-800 text-base bg-transparent" />
           <span className="text-gray-400 text-sm">{selected.unit}</span>
+        </div>
+
+        <label className="text-gray-600 text-sm font-medium mb-2 block">Crop Cycle *</label>
+        <div className="border-2 border-gray-200 rounded-2xl px-4 py-3 mb-4 focus-within:border-green-700 bg-white">
+          <select value={txForm.cropCycleId} onChange={(e) => setTxForm({ ...txForm, cropCycleId: e.target.value })}
+            className="w-full outline-none text-gray-800 text-base bg-transparent">
+            <option value="">— Select crop cycle —</option>
+            {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+          </select>
         </div>
 
         <label className="text-gray-600 text-sm font-medium mb-2 block">Notes (Optional)</label>

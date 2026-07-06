@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
-import { ensureDefaultSeason } from "@/lib/firebase/seasons";
+import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import {
   Plus, X, Loader2, Phone, MapPin,
   Handshake, CreditCard,
@@ -77,9 +77,11 @@ export default function DealersPage() {
     amount: "",
     paymentType: "credit" as "cash" | "credit",
     date: new Date().toISOString().split("T")[0],
+    cropCycleId: "",
     notes: "",
   });
 
+  const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
   const [dealerTxns, setDealerTxns] = useState<DealerTx[]>([]);
   const [expandedDealer, setExpandedDealer] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<DealerTx | null>(null);
@@ -114,6 +116,17 @@ export default function DealersPage() {
     );
     return () => unsub();
   }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    return subscribeCropCycles(orgId, setCropCycles);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (cropCycles.length === 0 || txForm.cropCycleId) return;
+    const active = cropCycles.find((c) => c.status === "Active") || cropCycles[0];
+    setTxForm((f) => ({ ...f, cropCycleId: active.id }));
+  }, [cropCycles]);
 
   const dealerTotals = (dealerId: string) => {
     const txns = dealerTxns.filter((t) => t.dealerId === dealerId);
@@ -160,17 +173,24 @@ export default function DealersPage() {
       setError("Please enter items purchased");
       return;
     }
+    if (!txForm.cropCycleId) {
+      setError("Please select a crop cycle");
+      return;
+    }
     if (!selectedDealer) return;
 
     try {
       setSaving(true);
       setError("");
       const amount = Number(txForm.amount);
-      const season = await ensureDefaultSeason(orgId!);
+      const cropCycle = cropCycles.find((c) => c.id === txForm.cropCycleId);
 
       await addDoc(collection(db, "transactions"), {
         organizationId: orgId,
-        seasonId: season.id,
+        cropCycleId: txForm.cropCycleId,
+        cropCycleName: cropCycle?.name || "",
+        seasonId: cropCycle?.seasonId || "",
+        seasonName: cropCycle?.seasonName || "",
         type: txForm.type === "purchase" ? "dealerPurchase" : "dealerPayment",
         dealerId: selectedDealer.id,
         dealerName: selectedDealer.name,
@@ -208,6 +228,7 @@ export default function DealersPage() {
         amount: "",
         paymentType: "credit",
         date: new Date().toISOString().split("T")[0],
+        cropCycleId: (cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "",
         notes: "",
       });
     } catch (err) {
@@ -456,6 +477,20 @@ export default function DealersPage() {
                 onChange={(e) => setTxForm({ ...txForm, date: e.target.value })}
                 className="flex-1 outline-none text-gray-800 text-base bg-transparent"
               />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <label className="text-gray-600 text-sm font-medium mb-2 block">Crop Cycle *</label>
+            <div className="border-2 border-gray-200 rounded-2xl px-4 py-3 focus-within:border-green-700 bg-white">
+              <select
+                value={txForm.cropCycleId}
+                onChange={(e) => setTxForm({ ...txForm, cropCycleId: e.target.value })}
+                className="w-full outline-none text-gray-800 text-base bg-transparent"
+              >
+                <option value="">— Select crop cycle —</option>
+                {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+              </select>
             </div>
           </div>
 

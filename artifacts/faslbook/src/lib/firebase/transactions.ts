@@ -24,7 +24,10 @@ export type TransactionType =
 export interface Transaction {
   id: string;
   organizationId: string;
-  seasonId: string;
+  seasonId?: string;
+  seasonName?: string;
+  cropCycleId?: string;
+  cropCycleName?: string;
   type: TransactionType;
   amount: number;
   date: string; // yyyy-mm-dd
@@ -84,4 +87,25 @@ export function filterByDateRange(txns: Transaction[], start?: string, end?: str
     if (end && t.date > end) return false;
     return true;
   });
+}
+
+/** Filters shared by Reports/Dashboard so every screen slices transactions the same way. */
+export function filterByCropCycle(txns: Transaction[], cropCycleId?: string): Transaction[] {
+  if (!cropCycleId) return txns;
+  return txns.filter((t) => t.cropCycleId === cropCycleId);
+}
+
+export function filterBySeason(txns: Transaction[], seasonId?: string): Transaction[] {
+  if (!seasonId) return txns;
+  return txns.filter((t) => t.seasonId === seasonId);
+}
+
+export function filterByFarmer(txns: Transaction[], farmerId?: string): Transaction[] {
+  if (!farmerId) return txns;
+  return txns.filter((t) => t.farmerId === farmerId);
+}
+
+export function filterByParcel(txns: Transaction[], parcelId?: string): Transaction[] {
+  if (!parcelId) return txns;
+  return txns.filter((t) => t.parcelId === parcelId);
 }

@@ -9,7 +9,7 @@ import { PRINT_CSS } from "@/components/print/PrintLayout";
 import FarmerLedgerTemplate  from "./FarmerLedgerTemplate";
 import ParcelReportTemplate   from "./ParcelReportTemplate";
 import GodownReportTemplate   from "./GodownReportTemplate";
-import ExpenseReportTemplate  from "./ExpenseReportTemplate";
+import CropCycleReportTemplate from "./CropCycleReportTemplate";
 import SalesReportTemplate    from "./SalesReportTemplate";
 import FarmSummaryTemplate    from "./FarmSummaryTemplate";
 import DealerReportTemplate   from "./DealerReportTemplate";
@@ -65,7 +65,7 @@ const REPORTS = [
   { key:"ledger",  label:"Farmer Khata",        icon:"📋", desc:"Full account statement for one farmer" },
   { key:"parcel",  label:"Parcel Report",        icon:"🌾", desc:"Crops, expenses and profit per parcel" },
   { key:"godown",  label:"Godown Register",      icon:"🏭", desc:"Warehouse inventory and stock movements" },
-  { key:"expense", label:"Expense Report",       icon:"💸", desc:"Expenses grouped by month" },
+  { key:"cropCycle", label:"Crop Cycle Report",  icon:"🌱", desc:"Income, expenses & profit per crop cycle" },
   { key:"sales",   label:"Sales Report",         icon:"📈", desc:"Sales with payment status" },
   { key:"dealer",  label:"Dealer Report",        icon:"🤝", desc:"Purchases, payments & outstanding balance" },
   { key:"workers", label:"Workers Report",       icon:"👷", desc:"Attendance and wages for daily/monthly staff" },
@@ -117,7 +117,8 @@ export default function PrintHubPage() {
   const [parcelIncome,   setParcelIncome]   = useState<any[]>([]);
   const [godownItems,    setGodownItems]    = useState<any[]>([]);
   const [godownTxns,     setGodownTxns]     = useState<any[]>([]);
-  const [allExpenses,    setAllExpenses]    = useState<any[]>([]);
+  const [reportCropCycles, setReportCropCycles] = useState<any[]>([]);
+  const [cropCycleTxnsByCycle, setCropCycleTxnsByCycle] = useState<Record<string, any[]>>({});
   const [allSales,       setAllSales]       = useState<any[]>([]);
   const [dealerTxns,     setDealerTxns]     = useState<any[]>([]);
   const [summaryData,    setSummaryData]    = useState<any>(null);
@@ -218,22 +219,32 @@ export default function PrintHubPage() {
           break;
         }
 
-        // ── Expense Report — transactions type=="expense" ──────────
-        // Single-field query only, filter type client-side
-        case "expense": {
-          const all = await getOrgDocs("transactions", orgId);
-          const rows = all
-            .filter(r => r.type === "expense")
-            .map(r => {
+        // ── Crop Cycle Report — income/expense transactions grouped by crop cycle ──
+        // Single-field query only, filter cropCycleId/date client-side
+        case "cropCycle": {
+          const [cycles, all] = await Promise.all([
+            getOrgDocs("cropCycles", orgId),
+            getOrgDocs("transactions", orgId),
+          ]);
+          const sortedCycles = cycles
+            .sort((a: any, b: any) => (b.startDate || "").localeCompare(a.startDate || ""));
+          const byCycle: Record<string, any[]> = {};
+          all
+            .filter((r: any) => r.type === "income" || r.type === "expense")
+            .forEach((r: any) => {
+              if (!r.cropCycleId) return;
               const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
-              const cat  = r.category||"other";
-              return { id:r.id, date, category:cat,
-                categoryLabel: r.categoryLabel || EXPENSE_LABELS[cat]||cat,
+              if ((dateFrom && date && date < dateFrom) || (dateTo && date && date > dateTo)) return;
+              const cat = r.category || "other";
+              const row = { id:r.id, date, type:r.type,
+                categoryLabel: r.categoryLabel || (r.type==="income" ? INCOME_LABELS[cat]??cat : EXPENSE_LABELS[cat]??cat),
+                category: cat,
                 description: r.notes||r.dealerName||r.parcelName||"", amount:Number(r.amount)||0 };
-            })
-            .filter(e => (!dateFrom||!e.date||e.date>=dateFrom) && (!dateTo||!e.date||e.date<=dateTo))
-            .sort((a,b)=>a.date.localeCompare(b.date));
-          setAllExpenses(rows);
+              if (!byCycle[r.cropCycleId]) byCycle[r.cropCycleId] = [];
+              byCycle[r.cropCycleId].push(row);
+            });
+          setReportCropCycles(sortedCycles);
+          setCropCycleTxnsByCycle(byCycle);
           break;
         }
 
@@ -382,8 +393,8 @@ export default function PrintHubPage() {
         <GodownReportTemplate items={godownItems} transactions={godownTxns} farmName={orgName}
           printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
       );
-      if (activeReport==="expense") return (
-        <ExpenseReportTemplate expenses={allExpenses} farmName={orgName}
+      if (activeReport==="cropCycle") return (
+        <CropCycleReportTemplate cropCycles={reportCropCycles} transactionsByCycle={cropCycleTxnsByCycle} farmName={orgName}
           printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
       );
       if (activeReport==="sales") return (
@@ -508,7 +519,7 @@ export default function PrintHubPage() {
               </div>
             )}
 
-            {["ledger","expense","sales","godown","dealer"].includes(activeReport) && (
+            {["ledger","cropCycle","sales","godown","dealer"].includes(activeReport) && (
               <div className="grid grid-cols-2 gap-3">
                 <DateInput label="From" value={dateFrom} onChange={setDateFrom} />
                 <DateInput label="To"   value={dateTo}   onChange={setDateTo} />

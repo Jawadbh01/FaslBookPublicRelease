@@ -10,7 +10,7 @@ import {
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { addTransaction } from "@/lib/firebase/transactions";
-import { ensureDefaultSeason } from "@/lib/firebase/seasons";
+import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import {
   ChevronLeft, MapPin, Package, BarChart2, Receipt, TrendingUp, TrendingDown,
   Plus, X, Loader2, CheckCircle,
@@ -123,18 +123,21 @@ export default function FarmerDetailPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [addType, setAddType] = useState<"credit" | "debit">("credit");
   const [addForm, setAddForm] = useState({
-    category: "cropSale", amount: "", date: todayStr(), parcelId: "", notes: "",
+    category: "cropSale", amount: "", date: todayStr(), parcelId: "", cropCycleId: "", notes: "",
   });
   const [addSaving, setAddSaving] = useState(false);
   const [addSaved, setAddSaved] = useState(false);
   const [addError, setAddError] = useState("");
+  const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
 
   const openAddForm = (type: "credit" | "debit") => {
     setAddType(type);
     setAddForm({
       category: type === "credit" ? "cropSale" : "fertilizer",
       amount: "", date: todayStr(),
-      parcelId: parcels[0]?.id || "", notes: "",
+      parcelId: parcels[0]?.id || "",
+      cropCycleId: (cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "",
+      notes: "",
     });
     setAddError(""); setAddSaved(false); setAddOpen(true);
   };
@@ -144,15 +147,19 @@ export default function FarmerDetailPage() {
   const handleSaveEntry = async () => {
     if (!addForm.amount || Number(addForm.amount) <= 0) { setAddError("Enter a valid amount"); return; }
     if (!addForm.date) { setAddError("Select a date"); return; }
+    if (!addForm.cropCycleId) { setAddError("Please select a crop cycle"); return; }
     if (!orgId || !farmer) { setAddError("Missing organization or farmer info"); return; }
     const cfg = addType === "credit" ? incomeTypes[addForm.category] : expenseCategories[addForm.category];
     const parcel = parcels.find((p) => p.id === addForm.parcelId);
+    const cropCycle = cropCycles.find((c) => c.id === addForm.cropCycleId);
     try {
       setAddSaving(true); setAddError("");
-      const season = await ensureDefaultSeason(orgId);
       await addTransaction({
         organizationId: orgId,
-        seasonId: season.id,
+        cropCycleId: addForm.cropCycleId,
+        cropCycleName: cropCycle?.name || "",
+        seasonId: cropCycle?.seasonId || "",
+        seasonName: cropCycle?.seasonName || "",
         type: addType === "credit" ? "income" : "expense",
         category: addForm.category,
         categoryLabel: cfg?.label || addForm.category,
@@ -222,6 +229,11 @@ export default function FarmerDetailPage() {
 
     return () => unsubs.forEach((u) => u());
   }, [id, orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    return subscribeCropCycles(orgId, setCropCycles);
+  }, [orgId]);
 
   // Most legacy ledger entries have no direct farmer link — they're tied to
   // parcels via parcelId, so once we know which parcels are assigned to this
@@ -547,6 +559,16 @@ export default function FarmerDetailPage() {
                       </select>
                     </>
                   )}
+
+                  <label className="text-gray-600 text-sm font-medium mb-2 block">Crop Cycle *</label>
+                  <select
+                    value={addForm.cropCycleId}
+                    onChange={(e) => setAddForm({ ...addForm, cropCycleId: e.target.value })}
+                    className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 mb-4 outline-none text-gray-800 text-base bg-white focus:border-green-700"
+                  >
+                    <option value="">— Select crop cycle —</option>
+                    {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+                  </select>
 
                   <label className="text-gray-600 text-sm font-medium mb-2 block">Notes (Optional)</label>
                   <textarea

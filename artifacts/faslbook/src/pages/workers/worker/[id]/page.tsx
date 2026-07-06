@@ -9,7 +9,7 @@ import {
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
 import { addTransaction } from "@/lib/firebase/transactions";
-import { ensureDefaultSeason } from "@/lib/firebase/seasons";
+import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import { ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
 
 interface Worker {
@@ -60,6 +60,8 @@ export default function WorkerDetailPage() {
   const [showPay, setShowPay] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [payNote, setPayNote] = useState("");
+  const [payCropCycleId, setPayCropCycleId] = useState("");
+  const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
   const [saving, setSaving] = useState(false);
   const [payError, setPayError] = useState("");
 
@@ -87,6 +89,17 @@ export default function WorkerDetailPage() {
 
     return () => unsubs.forEach((u) => u());
   }, [id, orgId]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    return subscribeCropCycles(orgId, setCropCycles);
+  }, [orgId]);
+
+  useEffect(() => {
+    if (cropCycles.length === 0) return;
+    const active = cropCycles.find((c) => c.status === "Active") || cropCycles[0];
+    setPayCropCycleId((id) => (id ? id : active.id));
+  }, [cropCycles]);
 
   // ── Monthly stats ────────────────────────────────────────────
   const monthAttendance = attendance.filter((a) => {
@@ -135,6 +148,7 @@ export default function WorkerDetailPage() {
 
   const handlePay = async () => {
     if (!payAmount || isNaN(Number(payAmount))) { setPayError("Enter valid amount"); return; }
+    if (!payCropCycleId) { setPayError("Please select a crop cycle"); return; }
     try {
       setSaving(true); setPayError("");
       const amount = Number(payAmount);
@@ -150,10 +164,13 @@ export default function WorkerDetailPage() {
         createdAt: serverTimestamp(),
         syncStatus: "synced",
       });
-      const season = await ensureDefaultSeason(orgId as string);
+      const cropCycle = cropCycles.find((c) => c.id === payCropCycleId);
       await addTransaction({
         organizationId: orgId as string,
-        seasonId: season.id,
+        cropCycleId: payCropCycleId,
+        cropCycleName: cropCycle?.name || "",
+        seasonId: cropCycle?.seasonId || "",
+        seasonName: cropCycle?.seasonName || "",
         type: "expense",
         category: "workerPayment",
         categoryLabel: "Worker Payment",
@@ -174,6 +191,7 @@ export default function WorkerDetailPage() {
       setShowPay(false);
       setPayAmount("");
       setPayNote("");
+      setPayCropCycleId((cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "");
     } catch { setPayError("Failed to record payment."); }
     finally { setSaving(false); }
   };
@@ -221,6 +239,19 @@ export default function WorkerDetailPage() {
               <input type="number" placeholder={String(Math.round(pending))} value={payAmount}
                 onChange={(e) => setPayAmount(e.target.value)}
                 className="flex-1 outline-none text-gray-800 text-base bg-transparent" />
+            </div>
+          </div>
+          <div className="mb-4">
+            <label className="text-gray-600 text-sm font-medium mb-2 block">Crop Cycle *</label>
+            <div className="border-2 border-gray-200 rounded-2xl px-4 py-3 focus-within:border-green-700 bg-white">
+              <select
+                value={payCropCycleId}
+                onChange={(e) => setPayCropCycleId(e.target.value)}
+                className="w-full outline-none text-gray-800 text-base bg-transparent"
+              >
+                <option value="">— Select crop cycle —</option>
+                {cropCycles.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.crop})</option>)}
+              </select>
             </div>
           </div>
           <div className="mb-8">

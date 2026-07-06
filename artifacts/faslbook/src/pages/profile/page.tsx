@@ -338,8 +338,8 @@ export default function ProfilePage() {
                   <Calendar size={18} color="#1B5E20" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-gray-800 font-semibold text-sm">Manage Seasons</p>
-                  <p className="text-gray-400 text-xs">Create, edit and switch seasons</p>
+                  <p className="text-gray-800 font-semibold text-sm">Manage Crop Cycles</p>
+                  <p className="text-gray-400 text-xs">Create, edit and switch crop cycles</p>
                 </div>
                 <ChevronRight size={18} color="#9CA3AF" />
               </div>
