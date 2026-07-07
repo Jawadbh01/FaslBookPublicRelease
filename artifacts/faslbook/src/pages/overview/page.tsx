@@ -78,21 +78,13 @@ export default function OverviewPage() {
   const [loading, setLoading]             = useState(true);
   const [copied, setCopied]               = useState(false);
 
-  // Overview filter — recalculates Income/Expense/Profit/Inventory/Dealer Dues/Loan Dues live.
-  type FilterKey = "currentCropCycle" | "last30" | "last90" | "currentYear" | "allTime";
-  const [filter, setFilter] = useState<FilterKey>("currentCropCycle");
+  // Overview filter — each active crop cycle is its own option, plus date ranges.
+  // FilterKey is either a cropCycle.id string, "last30", or "last60".
+  const [filter, setFilter] = useState<string>("__init__");
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [cropCycles, setCropCycles] = useState<CropCycle[]>([]);
   const [currentCropCycle, setCurrentCropCycle] = useState<CropCycle | null>(null);
   const [allTxns, setAllTxns] = useState<Transaction[]>([]);
-
-  const filterLabels: Record<FilterKey, string> = {
-    currentCropCycle: currentCropCycle ? `${currentCropCycle.name}` : "Current Crop Cycle",
-    last30: "Last 30 Days",
-    last90: "Last 90 Days",
-    currentYear: "Current Year",
-    allTime: "All Time",
-  };
 
   // ── Fetch user name from Firestore ───────────────────────────
   useEffect(() => {
@@ -106,6 +98,20 @@ export default function OverviewPage() {
       }
     });
   }, [user?.uid]);
+
+  // Once crop cycles load, default the filter to the most recent active one (or "last30" if none active)
+  useEffect(() => {
+    if (filter !== "__init__") return; // already set
+    const active = cropCycles.filter((c) => c.status === "Active");
+    if (active.length > 0) {
+      // pick the most recently started one
+      const sorted = [...active].sort((a, b) => (b.startDate > a.startDate ? 1 : -1));
+      setFilter(sorted[0].id);
+    } else if (cropCycles.length > 0) {
+      // no active ones — default to last30
+      setFilter("last30");
+    }
+  }, [cropCycles]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -148,25 +154,31 @@ export default function OverviewPage() {
 
   // ── Filter → filtered transactions ──────────────────────────────
   const todayStr = new Date().toISOString().split("T")[0];
-  const filterRange = (): { start?: string; end?: string } => {
+
+  const activeCropCycles = cropCycles.filter((c) => c.status === "Active")
+    .sort((a, b) => (b.startDate > a.startDate ? 1 : -1));
+
+  const DATE_FILTERS = ["last30", "last60"];
+  const isDateFilter = DATE_FILTERS.includes(filter);
+
+  const filteredTxns = (() => {
     if (filter === "last30") {
       const d = new Date(); d.setDate(d.getDate() - 30);
-      return { start: d.toISOString().split("T")[0], end: todayStr };
+      return filterByDateRange(allTxns, d.toISOString().split("T")[0], todayStr);
     }
-    if (filter === "last90") {
-      const d = new Date(); d.setDate(d.getDate() - 90);
-      return { start: d.toISOString().split("T")[0], end: todayStr };
+    if (filter === "last60") {
+      const d = new Date(); d.setDate(d.getDate() - 60);
+      return filterByDateRange(allTxns, d.toISOString().split("T")[0], todayStr);
     }
-    if (filter === "currentYear") {
-      const y = new Date().getFullYear();
-      return { start: `${y}-01-01`, end: `${y}-12-31` };
-    }
-    return {}; // allTime / currentCropCycle (handled separately below)
-  };
+    // filter is a cropCycleId
+    return filterByCropCycle(allTxns, filter);
+  })();
 
-  const filteredTxns = filter === "currentCropCycle"
-    ? filterByCropCycle(allTxns, currentCropCycle?.id)
-    : filterByDateRange(allTxns, filterRange().start, filterRange().end);
+  const selectedCropCycle = activeCropCycles.find((c) => c.id === filter) ?? null;
+  const filterLabel = filter === "last30" ? "Last 30 Days"
+    : filter === "last60" ? "Last 60 Days"
+    : selectedCropCycle ? selectedCropCycle.name
+    : "Select Period";
 
   const income = sumByType(filteredTxns, ["income"]);
   const expense = sumByType(filteredTxns, ["expense"]);
@@ -349,30 +361,56 @@ export default function OverviewPage() {
             <p className="font-bold text-gray-800 text-sm">Overview</p>
             <button
               onClick={() => setShowFilterMenu((v) => !v)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium max-w-[160px]"
               style={{ backgroundColor: "#E8F5E9", color: "#1B5E20" }}
             >
-              {filterLabels[filter]}
-              <ChevronRight size={12} className="rotate-90" color="#1B5E20" />
+              <span className="truncate">{filterLabel}</span>
+              <ChevronRight size={12} className={`shrink-0 transition-transform ${showFilterMenu ? "-rotate-90" : "rotate-90"}`} color="#1B5E20" />
             </button>
             {showFilterMenu && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowFilterMenu(false)} />
-                <div className="absolute right-0 top-8 z-20 bg-white rounded-2xl shadow-lg border border-gray-100 py-2 w-48">
-                  {(Object.keys(filterLabels) as (keyof typeof filterLabels)[]).map((key) => (
-                    <button
-                      key={key}
-                      onClick={() => { setFilter(key); setShowFilterMenu(false); }}
-                      className="w-full text-left px-4 py-2 text-sm"
-                      style={{
-                        color: filter === key ? "#1B5E20" : "#374151",
-                        fontWeight: filter === key ? 700 : 400,
-                        backgroundColor: filter === key ? "#E8F5E9" : "transparent",
-                      }}
-                    >
-                      {filterLabels[key]}
-                    </button>
-                  ))}
+                <div className="absolute right-0 top-9 z-20 bg-white rounded-2xl shadow-lg border border-gray-100 py-2 min-w-[180px] max-w-[220px]">
+                  {/* Active crop cycles */}
+                  {activeCropCycles.length > 0 && (
+                    <>
+                      <p className="px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Crop Cycles</p>
+                      {activeCropCycles.map((cc) => (
+                        <button
+                          key={cc.id}
+                          onClick={() => { setFilter(cc.id); setShowFilterMenu(false); }}
+                          className="w-full text-left px-4 py-2 text-sm truncate"
+                          style={{
+                            color: filter === cc.id ? "#1B5E20" : "#374151",
+                            fontWeight: filter === cc.id ? 700 : 400,
+                            backgroundColor: filter === cc.id ? "#E8F5E9" : "transparent",
+                          }}
+                        >
+                          {cc.name}
+                        </button>
+                      ))}
+                      <div className="mx-4 my-1 border-t border-gray-100" />
+                    </>
+                  )}
+                  {/* Date ranges */}
+                  <p className="px-4 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Date Range</p>
+                  {(["last30", "last60"] as const).map((key) => {
+                    const label = key === "last30" ? "Last 30 Days" : "Last 60 Days";
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => { setFilter(key); setShowFilterMenu(false); }}
+                        className="w-full text-left px-4 py-2 text-sm"
+                        style={{
+                          color: filter === key ? "#1B5E20" : "#374151",
+                          fontWeight: filter === key ? 700 : 400,
+                          backgroundColor: filter === key ? "#E8F5E9" : "transparent",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             )}
