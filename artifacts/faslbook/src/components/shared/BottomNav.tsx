@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { House, BookOpen, Warehouse, Handshake, Users, Crown } from "lucide-react";
+import { House, BookOpen, Warehouse, Handshake, Crown } from "lucide-react";
 import { useLangStore } from "@/store/langStore";
 import { useCallback } from "react";
 
@@ -19,7 +19,6 @@ export default function BottomNav() {
     { href: "/ledger",          labelKey: "khata",  icon: BookOpen },
     { href: "/inventory",       labelKey: "godown", icon: Warehouse },
     { href: "/dealers",         labelKey: "dealer", icon: Handshake },
-    { href: "/workers",         labelKey: "team",   icon: Users },
     { href: "/owner-expenses",  label: "Owner",     icon: Crown },
   ];
 
@@ -56,7 +55,7 @@ export default function BottomNav() {
                 style={{ transform: isActive ? "translateY(-1px) scale(1.1)" : "scale(1)" }}
               >
                 <Icon
-                  size={20}
+                  size={22}
                   color={isActive ? ACTIVE_COLOR : INACTIVE_COLOR}
                   strokeWidth={isActive ? 2.5 : 1.8}
                 />
@@ -65,7 +64,7 @@ export default function BottomNav() {
                 className="relative z-10 font-medium transition-all duration-200"
                 style={{
                   color:    isActive ? ACTIVE_COLOR : INACTIVE_COLOR,
-                  fontSize: "9px",
+                  fontSize: "10px",
                   fontWeight: isActive ? 700 : 500,
                 }}
               >
