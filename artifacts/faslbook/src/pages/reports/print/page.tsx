@@ -99,9 +99,11 @@ export default function PrintHubPage() {
   const [farmers, setFarmers] = useState<any[]>([]);
   const [parcels, setParcels] = useState<any[]>([]);
   const [dealersList, setDealersList] = useState<any[]>([]);
+  const [cropCyclesList, setCropCyclesList] = useState<any[]>([]);
   const [selectedFarmer, setSelectedFarmer] = useState("");
   const [selectedParcel, setSelectedParcel] = useState("");
   const [selectedDealer, setSelectedDealer] = useState("");
+  const [selectedCropCycle, setSelectedCropCycle] = useState("");
 
   // Date range — default: last 3 months
   const [dateFrom, setDateFrom] = useState(() => {
@@ -133,17 +135,20 @@ export default function PrintHubPage() {
     (async () => {
       setLoading(true);
       try {
-        const [workers, pls, dls] = await Promise.all([
+        const [workers, pls, dls, cycles] = await Promise.all([
           getOrgDocs("workers", orgId),
           getOrgDocs("parcels", orgId),
           getOrgDocs("dealers", orgId),
+          getOrgDocs("cropCycles", orgId),
         ]);
         // Filter farmers client-side — no composite index needed
         const fl = workers.filter(w => w.workerType === "farmer");
         const pl = pls.map(d => ({ id: d.id, name: d.name || "Unnamed" }));
+        const cl = cycles.sort((a: any, b: any) => (b.startDate||"").localeCompare(a.startDate||""));
         setFarmers(fl);
         setParcels(pl);
         setDealersList(dls);
+        setCropCyclesList(cl);
         if (fl.length) setSelectedFarmer(fl[0].id);
         if (pl.length) setSelectedParcel(pl[0].id);
       } catch (err) {
@@ -154,7 +159,7 @@ export default function PrintHubPage() {
   }, [orgId]);
 
   // Load data when report/filters change
-  useEffect(() => { if (orgId) loadData(); }, [activeReport, orgId, selectedFarmer, selectedParcel, selectedDealer, dateFrom, dateTo]);
+  useEffect(() => { if (orgId) loadData(); }, [activeReport, orgId, selectedFarmer, selectedParcel, selectedDealer, selectedCropCycle, dateFrom, dateTo]);
 
   async function loadData() {
     if (!orgId) return;
@@ -226,13 +231,17 @@ export default function PrintHubPage() {
             getOrgDocs("cropCycles", orgId),
             getOrgDocs("transactions", orgId),
           ]);
-          const sortedCycles = cycles
-            .sort((a: any, b: any) => (b.startDate || "").localeCompare(a.startDate || ""));
+          const allCycles = cycles.sort((a: any, b: any) => (b.startDate || "").localeCompare(a.startDate || ""));
+          // If a specific cycle is selected filter to just that one; otherwise show all
+          const filteredCycles = selectedCropCycle
+            ? allCycles.filter((c: any) => c.id === selectedCropCycle)
+            : allCycles;
           const byCycle: Record<string, any[]> = {};
           all
             .filter((r: any) => r.type === "income" || r.type === "expense")
             .forEach((r: any) => {
               if (!r.cropCycleId) return;
+              if (selectedCropCycle && r.cropCycleId !== selectedCropCycle) return;
               const date = r.date ? (typeof r.date==="string" ? r.date : r.date.toDate?.()?.toISOString().split("T")[0]||"") : "";
               if ((dateFrom && date && date < dateFrom) || (dateTo && date && date > dateTo)) return;
               const cat = r.category || "other";
@@ -243,7 +252,7 @@ export default function PrintHubPage() {
               if (!byCycle[r.cropCycleId]) byCycle[r.cropCycleId] = [];
               byCycle[r.cropCycleId].push(row);
             });
-          setReportCropCycles(sortedCycles);
+          setReportCropCycles(filteredCycles);
           setCropCycleTxnsByCycle(byCycle);
           break;
         }
@@ -516,6 +525,24 @@ export default function PrintHubPage() {
                   <option value="">All Dealers</option>
                   {dealersList.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </Select>
+              </div>
+            )}
+
+            {activeReport==="cropCycle" && (
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold text-gray-400 uppercase">Crop Cycle</label>
+                {loading ? (
+                  <div className="flex items-center gap-2 py-2 px-3 text-sm text-gray-400">
+                    <Loader2 size={14} className="animate-spin" /> Loading…
+                  </div>
+                ) : (
+                  <Select value={selectedCropCycle} onChange={setSelectedCropCycle}>
+                    <option value="">Overall (All Crop Cycles)</option>
+                    {cropCyclesList.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} — {c.crop} ({c.status})</option>
+                    ))}
+                  </Select>
+                )}
               </div>
             )}
 

@@ -81,8 +81,12 @@ export default function ParcelsPage() {
     ));
 
     unsubs.push(onSnapshot(
-      query(collection(db, "users"), where("organizationId", "==", orgId), where("role", "==", "farmer")),
-      (snap) => setFarmers(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Farmer)))
+      query(collection(db, "workers"), where("organizationId", "==", orgId)),
+      (snap) => setFarmers(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as any))
+          .filter((w) => w.workerType === "farmer")
+      )
     ));
 
     return () => unsubs.forEach((u) => u());

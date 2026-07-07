@@ -4,11 +4,11 @@ import { useAuthStore } from "@/store/authStore";
 import {
   CropCycle, subscribeCropCycles, createCropCycle, updateCropCycle,
 } from "@/lib/firebase/cropCycles";
-import { Season, subscribeSeasons } from "@/lib/firebase/seasons";
+import { Season, subscribeSeasons, createSeason } from "@/lib/firebase/seasons";
 import { subscribeTransactions, sumByType, filterByCropCycle, type Transaction } from "@/lib/firebase/transactions";
 import {
   ChevronLeft, Plus, X, Loader2, Sprout, Pencil, CheckCircle2,
-  TrendingUp, TrendingDown, Wallet, MapPin, User,
+  TrendingUp, TrendingDown, Wallet, MapPin, User, CalendarDays,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -33,6 +33,12 @@ export default function SeasonsPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  // ── Add Season inline state ──────────────────────────────────
+  const [showSeasonForm, setShowSeasonForm] = useState(false);
+  const [seasonForm, setSeasonForm] = useState({ name: "", startDate: `${new Date().getFullYear()}-01-01`, endDate: `${new Date().getFullYear()}-12-31` });
+  const [savingSeason, setSavingSeason] = useState(false);
+  const [seasonError, setSeasonError] = useState("");
 
   const now = new Date();
   const emptyForm = {
@@ -90,6 +96,24 @@ export default function SeasonsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveSeason = async () => {
+    if (!seasonForm.name.trim()) { setSeasonError("Season name is required"); return; }
+    if (!seasonForm.startDate || !seasonForm.endDate) { setSeasonError("Start and end dates required"); return; }
+    if (!orgId) return;
+    try {
+      setSavingSeason(true); setSeasonError("");
+      const year = parseInt(seasonForm.startDate.split("-")[0]) || new Date().getFullYear();
+      const newId = await createSeason({
+        organizationId: orgId, name: seasonForm.name.trim(), year,
+        startDate: seasonForm.startDate, endDate: seasonForm.endDate, status: "Active",
+      });
+      setForm((f) => ({ ...f, seasonId: newId }));
+      setShowSeasonForm(false);
+      setSeasonForm({ name: "", startDate: `${new Date().getFullYear()}-01-01`, endDate: `${new Date().getFullYear()}-12-31` });
+    } catch { setSeasonError("Failed to save season."); }
+    finally { setSavingSeason(false); }
   };
 
   const cycleStats = (cycleId: string) => {
@@ -261,7 +285,64 @@ export default function SeasonsPage() {
               </div>
 
               <div className="mb-4">
-                <label className="text-gray-600 text-sm font-medium mb-2 block">Season (optional)</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-gray-600 text-sm font-medium">Season (optional)</label>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowSeasonForm((v) => !v); setSeasonError(""); }}
+                      className="flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full active:scale-95 transition-transform"
+                      style={{ backgroundColor: "#E8F5E9", color: "#1B5E20" }}
+                    >
+                      <Plus size={12} /> New Season
+                    </button>
+                  )}
+                </div>
+
+                {showSeasonForm && (
+                  <div className="border-2 rounded-2xl p-4 mb-3" style={{ borderColor: "#1B5E20", backgroundColor: "#F9FFF9" }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <CalendarDays size={16} color="#1B5E20" />
+                      <p className="text-sm font-bold text-gray-700">Add New Season</p>
+                      <button onClick={() => setShowSeasonForm(false)} className="ml-auto">
+                        <X size={16} color="#9CA3AF" />
+                      </button>
+                    </div>
+                    {seasonError && (
+                      <p className="text-red-600 text-xs bg-red-50 px-3 py-2 rounded-xl mb-3">{seasonError}</p>
+                    )}
+                    <input
+                      type="text"
+                      value={seasonForm.name}
+                      onChange={(e) => setSeasonForm({ ...seasonForm, name: e.target.value })}
+                      placeholder="Season name e.g. Rabi 2026"
+                      className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 outline-none text-gray-800 text-sm focus:border-green-700 mb-2"
+                    />
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div>
+                        <p className="text-xs text-gray-400 mb-1">Start Date</p>
+                        <input type="date" value={seasonForm.startDate}
+                          onChange={(e) => setSeasonForm({ ...seasonForm, startDate: e.target.value })}
+                          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 outline-none text-gray-800 text-xs focus:border-green-700" />
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400 mb-1">End Date</p>
+                        <input type="date" value={seasonForm.endDate}
+                          onChange={(e) => setSeasonForm({ ...seasonForm, endDate: e.target.value })}
+                          className="w-full border-2 border-gray-200 rounded-xl px-3 py-2 outline-none text-gray-800 text-xs focus:border-green-700" />
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleSaveSeason}
+                      disabled={savingSeason}
+                      className="w-full py-2.5 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
+                      style={{ backgroundColor: "#1B5E20" }}
+                    >
+                      {savingSeason ? <Loader2 size={16} className="animate-spin" /> : "Save Season"}
+                    </button>
+                  </div>
+                )}
+
                 <select
                   value={form.seasonId}
                   onChange={(e) => setForm({ ...form, seasonId: e.target.value })}
