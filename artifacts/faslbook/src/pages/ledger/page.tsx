@@ -11,6 +11,7 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/lib/firebase/config";
 import { compressImage } from "@/lib/utils/compressImage";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import { ensureDefaultCropCycle, subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import type { TransactionType } from "@/lib/firebase/transactions";
 import {
@@ -278,11 +279,10 @@ export default function LedgerPage() {
     const parcel = parcels.find((p) => p.id === incomeForm.parcelId);
     const farmer = farmers.find((f) => f.id === incomeForm.farmerId);
     const cropCycle = cropCycles.find((c) => c.id === incomeForm.cropCycleId);
+    const isOnline = navigator.onLine;
+    setSaving(true); setFormError("");
     try {
-      setSaving(true); setFormError("");
-
-      // 1. Save entry to Firestore immediately (no photo URL yet)
-      const docRef = await addDoc(collection(db, "transactions"), {
+      const payload = {
         organizationId: orgId, type: "income",
         cropCycleId: incomeForm.cropCycleId, cropCycleName: cropCycle?.name || "",
         seasonId: incomeForm.seasonId || "", seasonName: cropCycle?.seasonName || "",
@@ -295,16 +295,25 @@ export default function LedgerPage() {
         notes: incomeForm.notes, proofUrl: "",
         location: incomeLocation.location || null,
         createdBy: auth.currentUser?.uid || "",
-        createdAt: serverTimestamp(), syncStatus: "synced",
-      });
+        createdAt: serverTimestamp(),
+        syncStatus: isOnline ? "synced" : "pending",
+      };
 
-      // 2. Show success instantly — don't wait for photo upload
-      setSuccessMsg({ title: "Income Saved! ✅", sub: `+${fmtPKR(Number(incomeForm.amount))} (${incomeTypes[incomeForm.type]?.label})` });
+      // 1. Race write against 6s timeout — resolves immediately from local cache when offline
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 6000)
+      );
+      const writePromise = addDoc(collection(db, "transactions"), payload);
+      const docRef = await Promise.race([writePromise, timeout]).catch(() => writePromise);
+
+      // 2. Show success immediately — don't wait for photo upload
+      if (!isOnline) notifyOfflineSave("Income");
+      setSuccessMsg({ title: isOnline ? "Income Saved! ✅" : "Saved Offline 📶", sub: `+${fmtPKR(Number(incomeForm.amount))} (${incomeTypes[incomeForm.type]?.label})` });
       setSuccess(true);
       setSaving(false);
 
-      // 3. Upload proof in background and patch the entry
-      if (incomeProofFile) {
+      // 3. Upload proof in background (skip when offline — Storage has no offline queue)
+      if (incomeProofFile && isOnline) {
         uploadPhoto(incomeProofFile, `proofs/${orgId}/${docRef.id}_proof.jpg`)
           .then((url) => {
             import("firebase/firestore").then(({ doc: fsDoc, updateDoc }) => {
@@ -317,7 +326,7 @@ export default function LedgerPage() {
       addDoc(collection(db, "activityLogs"), {
         organizationId: orgId, userId: auth.currentUser?.uid || "", userName: auth.currentUser?.displayName || "",
         action: "INCOME_ADDED", description: `${incomeTypes[incomeForm.type]?.label} income: ${fmtPKR(Number(incomeForm.amount))}`,
-        createdAt: serverTimestamp(), syncStatus: "synced",
+        createdAt: serverTimestamp(), syncStatus: isOnline ? "synced" : "pending",
       }).catch(console.error);
 
     } catch (e) { console.error(e); setFormError("Failed to save. Try again."); setSaving(false); }
@@ -334,11 +343,10 @@ export default function LedgerPage() {
     const dealer = dealers.find((d) => d.id === expenseForm.dealerId);
     const farmer = farmers.find((f) => f.id === expenseForm.farmerId);
     const cropCycle = cropCycles.find((c) => c.id === expenseForm.cropCycleId);
+    const isOnline = navigator.onLine;
+    setSaving(true); setFormError("");
     try {
-      setSaving(true); setFormError("");
-
-      // 1. Save entry to Firestore immediately (no receipt URL yet)
-      const docRef = await addDoc(collection(db, "transactions"), {
+      const payload = {
         organizationId: orgId, type: "expense",
         cropCycleId: expenseForm.cropCycleId, cropCycleName: cropCycle?.name || "",
         seasonId: expenseForm.seasonId || "", seasonName: cropCycle?.seasonName || "",
@@ -352,16 +360,25 @@ export default function LedgerPage() {
         notes: expenseForm.notes, receiptUrl: "",
         location: expenseLocation.location || null,
         createdBy: auth.currentUser?.uid || "",
-        createdAt: serverTimestamp(), syncStatus: "synced",
-      });
+        createdAt: serverTimestamp(),
+        syncStatus: isOnline ? "synced" : "pending",
+      };
 
-      // 2. Show success instantly — don't wait for photo upload
-      setSuccessMsg({ title: "Expense Saved! ✅", sub: `−${fmtPKR(Number(expenseForm.amount))} (${expenseCategories[expenseForm.category]?.label})` });
+      // 1. Race write against 6s timeout — resolves from local cache when offline
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 6000)
+      );
+      const writePromise = addDoc(collection(db, "transactions"), payload);
+      const docRef = await Promise.race([writePromise, timeout]).catch(() => writePromise);
+
+      // 2. Show success immediately
+      if (!isOnline) notifyOfflineSave("Expense");
+      setSuccessMsg({ title: isOnline ? "Expense Saved! ✅" : "Saved Offline 📶", sub: `−${fmtPKR(Number(expenseForm.amount))} (${expenseCategories[expenseForm.category]?.label})` });
       setSuccess(true);
       setSaving(false);
 
-      // 3. Upload receipt in background and patch the entry
-      if (receiptFile) {
+      // 3. Upload receipt in background (skip when offline — Storage has no offline queue)
+      if (receiptFile && isOnline) {
         uploadPhoto(receiptFile, `receipts/${orgId}/${docRef.id}_receipt.jpg`)
           .then((url) => {
             import("firebase/firestore").then(({ doc: fsDoc, updateDoc }) => {
@@ -374,7 +391,7 @@ export default function LedgerPage() {
       addDoc(collection(db, "activityLogs"), {
         organizationId: orgId, userId: auth.currentUser?.uid || "", userName: auth.currentUser?.displayName || "",
         action: "EXPENSE_ADDED", description: `${expenseCategories[expenseForm.category]?.label} expense: ${fmtPKR(Number(expenseForm.amount))}`,
-        createdAt: serverTimestamp(), syncStatus: "synced",
+        createdAt: serverTimestamp(), syncStatus: isOnline ? "synced" : "pending",
       }).catch(console.error);
 
     } catch (e) { console.error(e); setFormError("Failed to save. Try again."); setSaving(false); }
