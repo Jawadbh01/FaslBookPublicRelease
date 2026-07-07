@@ -11,6 +11,7 @@ import { useAuthStore } from "@/store/authStore";
 import { addTransaction } from "@/lib/firebase/transactions";
 import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import { ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 
 interface Worker {
   id: string;
@@ -149,10 +150,12 @@ export default function WorkerDetailPage() {
   const handlePay = async () => {
     if (!payAmount || isNaN(Number(payAmount))) { setPayError("Enter valid amount"); return; }
     if (!payCropCycleId) { setPayError("Please select a crop cycle"); return; }
+    const isOnline = navigator.onLine;
     try {
       setSaving(true); setPayError("");
       const amount = Number(payAmount);
-      await addDoc(collection(db, "workerPayments"), {
+      const cropCycle = cropCycles.find((c) => c.id === payCropCycleId);
+      const paymentPayload = {
         workerId: id,
         workerName: worker?.name,
         amount,
@@ -162,35 +165,51 @@ export default function WorkerDetailPage() {
         organizationId: orgId,
         paidBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
-      });
-      const cropCycle = cropCycles.find((c) => c.id === payCropCycleId);
-      await addTransaction({
+        syncStatus: isOnline ? "synced" : "pending",
+      };
+      const txPayload = {
         organizationId: orgId as string,
         cropCycleId: payCropCycleId,
         cropCycleName: cropCycle?.name || "",
         seasonId: cropCycle?.seasonId || "",
         seasonName: cropCycle?.seasonName || "",
-        type: "expense",
+        type: "expense" as const,
         category: "workerPayment",
         categoryLabel: "Worker Payment",
         amount,
         date: new Date().toISOString().split("T")[0],
         description: `Payment to ${worker?.name}`,
         notes: `Payment to ${worker?.name}`,
-      });
-      await addDoc(collection(db, "activityLogs"), {
+      };
+      const logPayload = {
         organizationId: orgId,
         userId: auth.currentUser?.uid || "",
         userName: auth.currentUser?.displayName || "",
         action: "WORKER_PAID",
         description: `Paid Rs. ${amount} to ${worker?.name}`,
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
-      });
+        syncStatus: isOnline ? "synced" : "pending",
+      };
+
+      if (!isOnline) {
+        // Offline: fire-and-forget — Firestore queues all writes locally
+        // addTransaction handles notifyOfflineSave internally when offline, so don't call it again
+        addDoc(collection(db, "workerPayments"), paymentPayload).catch(console.error);
+        addTransaction(txPayload, "Worker Payment").catch(console.error);
+        addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
+        setShowPay(false);
+        setPayAmount(""); setPayNote("");
+        setPayCropCycleId((cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "");
+        setSaving(false);
+        return;
+      }
+
+      // Online: await normally
+      await addDoc(collection(db, "workerPayments"), paymentPayload);
+      await addTransaction(txPayload);
+      addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
       setShowPay(false);
-      setPayAmount("");
-      setPayNote("");
+      setPayAmount(""); setPayNote("");
       setPayCropCycleId((cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "");
     } catch { setPayError("Failed to record payment."); }
     finally { setSaving(false); }

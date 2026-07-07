@@ -121,12 +121,13 @@ export default function LoansPage() {
     if (!form.lenderName) { setError("Lender name is required"); return; }
     if (!form.amount || isNaN(Number(form.amount))) { setError("Enter valid amount"); return; }
     if (!form.cropCycleId) { setError("Please select a crop cycle"); return; }
+    const isOnline = navigator.onLine;
     try {
       setSaving(true);
       setError("");
       const amount = Number(form.amount);
       const cropCycle = cropCycles.find((c) => c.id === form.cropCycleId);
-      const loanRef = await addDoc(collection(db, "loans"), {
+      const loanPayload = {
         lenderName: form.lenderName.trim(),
         lenderType: form.lenderType,
         amount,
@@ -136,9 +137,54 @@ export default function LoansPage() {
         organizationId: orgId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        syncStatus: navigator.onLine ? "synced" : "pending",
+        syncStatus: isOnline ? "synced" : "pending",
+      };
+      const resetForm = () => setForm({
+        lenderName: "", lenderType: "person",
+        amount: "", borrowDate: new Date().toISOString().split("T")[0],
+        dueDate: "",
+        cropCycleId: (cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "",
+        notes: "",
       });
 
+      if (!isOnline) {
+        // Offline: truly fire-and-forget — never await any write, Firestore queues all locally
+        addDoc(collection(db, "loans"), loanPayload).catch(console.error);
+        addDoc(collection(db, "transactions"), {
+          organizationId: orgId,
+          cropCycleId: form.cropCycleId,
+          cropCycleName: cropCycle?.name || "",
+          seasonId: cropCycle?.seasonId || "",
+          seasonName: cropCycle?.seasonName || "",
+          type: "loanTaken",
+          loanId: "pending", // loanId linked properly on next online sync via Firestore queue ordering
+          amount,
+          date: form.borrowDate,
+          description: `Borrowed from ${form.lenderName}`,
+          notes: form.notes,
+          createdBy: auth.currentUser?.uid || "",
+          createdAt: serverTimestamp(),
+          syncStatus: "pending",
+        }).catch(console.error);
+        addDoc(collection(db, "activityLogs"), {
+          organizationId: orgId,
+          userId: auth.currentUser?.uid || "",
+          userName: auth.currentUser?.displayName || "",
+          action: "LOAN_ADDED",
+          description: `Borrowed ${fmt(amount)} from ${form.lenderName}`,
+          recordType: "loans",
+          createdAt: serverTimestamp(),
+          syncStatus: "pending",
+        }).catch(console.error);
+        notifyOfflineSave("Loan");
+        setShowAdd(false);
+        resetForm();
+        setSaving(false);
+        return;
+      }
+
+      // Online: await to get the real loanId for the transaction link
+      const loanRef = await addDoc(collection(db, "loans"), loanPayload);
       await addDoc(collection(db, "transactions"), {
         organizationId: orgId,
         cropCycleId: form.cropCycleId,
@@ -153,11 +199,9 @@ export default function LoansPage() {
         notes: form.notes,
         createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
-        syncStatus: navigator.onLine ? "synced" : "pending",
+        syncStatus: "synced",
       });
-      if (!navigator.onLine) notifyOfflineSave("Loan");
-
-      await addDoc(collection(db, "activityLogs"), {
+      addDoc(collection(db, "activityLogs"), {
         organizationId: orgId,
         userId: auth.currentUser?.uid || "",
         userName: auth.currentUser?.displayName || "",
@@ -167,16 +211,10 @@ export default function LoansPage() {
         recordType: "loans",
         createdAt: serverTimestamp(),
         syncStatus: "synced",
-      });
+      }).catch(console.error);
 
       setShowAdd(false);
-      setForm({
-        lenderName: "", lenderType: "person",
-        amount: "", borrowDate: new Date().toISOString().split("T")[0],
-        dueDate: "",
-        cropCycleId: (cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "",
-        notes: "",
-      });
+      resetForm();
     } catch {
       setError("Failed to save loan.");
     } finally {
@@ -192,12 +230,12 @@ export default function LoansPage() {
     const remaining = (selectedLoan.amount || 0) - paidAmountFor(selectedLoan.id);
     if (amount > remaining) { setError(`Cannot pay more than remaining: ${fmt(remaining)}`); return; }
 
+    const isOnline = navigator.onLine;
     try {
       setSaving(true);
       setError("");
       const cropCycle = cropCycles.find((c) => c.id === payCropCycleId);
-
-      await addDoc(collection(db, "transactions"), {
+      const txPayload = {
         organizationId: orgId,
         cropCycleId: payCropCycleId,
         cropCycleName: cropCycle?.name || "",
@@ -211,10 +249,9 @@ export default function LoansPage() {
         notes: payNote,
         createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
-      });
-
-      await addDoc(collection(db, "activityLogs"), {
+        syncStatus: isOnline ? "synced" : "pending",
+      };
+      const logPayload = {
         organizationId: orgId,
         userId: auth.currentUser?.uid || "",
         action: "LOAN_PAYMENT",
@@ -222,13 +259,25 @@ export default function LoansPage() {
         recordId: selectedLoan.id,
         recordType: "loans",
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
-      });
+        syncStatus: isOnline ? "synced" : "pending",
+      };
 
+      if (!isOnline) {
+        addDoc(collection(db, "transactions"), txPayload).catch(console.error);
+        addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
+        notifyOfflineSave("Loan Payment");
+        setShowPay(false);
+        setSelectedLoan(null);
+        setPayAmount(""); setPayNote("");
+        setSaving(false);
+        return;
+      }
+
+      await addDoc(collection(db, "transactions"), txPayload);
+      addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
       setShowPay(false);
       setSelectedLoan(null);
-      setPayAmount("");
-      setPayNote("");
+      setPayAmount(""); setPayNote("");
     } catch {
       setError("Failed to record payment.");
     } finally {

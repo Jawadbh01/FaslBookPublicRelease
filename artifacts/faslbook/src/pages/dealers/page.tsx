@@ -143,10 +143,11 @@ export default function DealersPage() {
 
   const handleSaveDealer = async () => {
     if (!dForm.name) { setError("Dealer name is required"); return; }
+    const isOnline = navigator.onLine;
     try {
       setSaving(true);
       setError("");
-      await addDoc(collection(db, "dealers"), {
+      const payload = {
         name: dForm.name.trim(),
         phone: dForm.phone.trim(),
         address: dForm.address.trim(),
@@ -154,9 +155,17 @@ export default function DealersPage() {
         organizationId: orgId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        syncStatus: navigator.onLine ? "synced" : "pending",
-      });
-      if (!navigator.onLine) notifyOfflineSave("Dealer");
+        syncStatus: isOnline ? "synced" : "pending",
+      };
+      if (!isOnline) {
+        addDoc(collection(db, "dealers"), payload).catch(console.error);
+        notifyOfflineSave("Dealer");
+        setShowAdd(false);
+        setDForm({ name: "", phone: "", address: "", notes: "" });
+        setSaving(false);
+        return;
+      }
+      await addDoc(collection(db, "dealers"), payload);
       setShowAdd(false);
       setDForm({ name: "", phone: "", address: "", notes: "" });
     } catch {
@@ -181,13 +190,13 @@ export default function DealersPage() {
     }
     if (!selectedDealer) return;
 
+    const isOnline = navigator.onLine;
     try {
       setSaving(true);
       setError("");
       const amount = Number(txForm.amount);
       const cropCycle = cropCycles.find((c) => c.id === txForm.cropCycleId);
-
-      await addDoc(collection(db, "transactions"), {
+      const txPayload = {
         organizationId: orgId,
         cropCycleId: txForm.cropCycleId,
         cropCycleName: cropCycle?.name || "",
@@ -205,11 +214,9 @@ export default function DealersPage() {
         notes: txForm.notes,
         createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
-        syncStatus: navigator.onLine ? "synced" : "pending",
-      });
-      if (!navigator.onLine) notifyOfflineSave(txForm.type === "purchase" ? "Purchase" : "Payment");
-
-      await addDoc(collection(db, "activityLogs"), {
+        syncStatus: isOnline ? "synced" : "pending",
+      };
+      const logPayload = {
         organizationId: orgId,
         userId: auth.currentUser?.uid || "",
         userName: auth.currentUser?.displayName || "",
@@ -220,12 +227,9 @@ export default function DealersPage() {
         recordId: selectedDealer.id,
         recordType: "dealers",
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
-      });
-
-      setShowTx(false);
-      setSelectedDealer(null);
-      setTxForm({
+        syncStatus: isOnline ? "synced" : "pending",
+      };
+      const resetTxForm = () => setTxForm({
         type: "purchase",
         items: "",
         amount: "",
@@ -234,6 +238,25 @@ export default function DealersPage() {
         cropCycleId: (cropCycles.find((c) => c.status === "Active") || cropCycles[0])?.id || "",
         notes: "",
       });
+
+      if (!isOnline) {
+        // Offline: fire-and-forget — Firestore queues locally, toast confirms save
+        addDoc(collection(db, "transactions"), txPayload).catch(console.error);
+        addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
+        notifyOfflineSave(txForm.type === "purchase" ? "Purchase" : "Payment");
+        setShowTx(false);
+        setSelectedDealer(null);
+        resetTxForm();
+        setSaving(false);
+        return;
+      }
+
+      // Online: await normally
+      await addDoc(collection(db, "transactions"), txPayload);
+      addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
+      setShowTx(false);
+      setSelectedDealer(null);
+      resetTxForm();
     } catch (err) {
       console.error(err);
       setError("Failed to save transaction.");
@@ -259,13 +282,13 @@ export default function DealersPage() {
       setError("Please enter a valid amount");
       return;
     }
+    const isOnline = navigator.onLine;
     try {
       setSaving(true);
       setError("");
       const newAmount = Number(editForm.amount);
       const oldAmount = editingTx.amount || 0;
-
-      await updateDoc(doc(db, "transactions", editingTx.id), {
+      const updatePayload = {
         description: editingTx.type === "dealerPurchase" ? editForm.items : editingTx.description,
         amount: newAmount,
         paymentType: editForm.paymentType,
@@ -273,9 +296,8 @@ export default function DealersPage() {
         notes: editForm.notes,
         edited: true,
         editedAt: serverTimestamp(),
-      });
-
-      await addDoc(collection(db, "activityLogs"), {
+      };
+      const logPayload = {
         organizationId: orgId,
         userId: auth.currentUser?.uid || "",
         userName: auth.currentUser?.displayName || "",
@@ -284,9 +306,20 @@ export default function DealersPage() {
         recordId: editingTx.id,
         recordType: "transactions",
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
-      });
+        syncStatus: isOnline ? "synced" : "pending",
+      };
 
+      if (!isOnline) {
+        updateDoc(doc(db, "transactions", editingTx.id), updatePayload).catch(console.error);
+        addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
+        notifyOfflineSave("Transaction Edit");
+        setEditTxSaved(true);
+        setSaving(false);
+        return;
+      }
+
+      await updateDoc(doc(db, "transactions", editingTx.id), updatePayload);
+      addDoc(collection(db, "activityLogs"), logPayload).catch(console.error);
       setEditTxSaved(true);
     } catch (err) {
       console.error(err);

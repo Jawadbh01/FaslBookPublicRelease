@@ -299,21 +299,30 @@ export default function LedgerPage() {
         syncStatus: isOnline ? "synced" : "pending",
       };
 
-      // 1. Race write against 6s timeout — resolves immediately from local cache when offline
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 6000)
-      );
-      const writePromise = addDoc(collection(db, "transactions"), payload);
-      const docRef = await Promise.race([writePromise, timeout]).catch(() => writePromise);
+      if (!isOnline) {
+        // Offline: Firestore queues the write locally — never await, show success immediately
+        addDoc(collection(db, "transactions"), payload).catch(console.error);
+        addDoc(collection(db, "activityLogs"), {
+          organizationId: orgId, userId: auth.currentUser?.uid || "", userName: auth.currentUser?.displayName || "",
+          action: "INCOME_ADDED", description: `${incomeTypes[incomeForm.type]?.label} income: ${fmtPKR(Number(incomeForm.amount))}`,
+          createdAt: serverTimestamp(), syncStatus: "pending",
+        }).catch(console.error);
+        notifyOfflineSave("Income");
+        setSuccessMsg({ title: "Saved Offline 📶", sub: `+${fmtPKR(Number(incomeForm.amount))} (${incomeTypes[incomeForm.type]?.label}) · will sync when connected` });
+        setSuccess(true);
+        setSaving(false);
+        return;
+      }
 
-      // 2. Show success immediately — don't wait for photo upload
-      if (!isOnline) notifyOfflineSave("Income");
-      setSuccessMsg({ title: isOnline ? "Income Saved! ✅" : "Saved Offline 📶", sub: `+${fmtPKR(Number(incomeForm.amount))} (${incomeTypes[incomeForm.type]?.label})` });
+      // Online: await the write normally
+      const docRef = await addDoc(collection(db, "transactions"), payload);
+
+      setSuccessMsg({ title: "Income Saved! ✅", sub: `+${fmtPKR(Number(incomeForm.amount))} (${incomeTypes[incomeForm.type]?.label})` });
       setSuccess(true);
       setSaving(false);
 
-      // 3. Upload proof in background (skip when offline — Storage has no offline queue)
-      if (incomeProofFile && isOnline) {
+      // Upload proof in background (skip when offline — Storage has no offline queue)
+      if (incomeProofFile) {
         uploadPhoto(incomeProofFile, `proofs/${orgId}/${docRef.id}_proof.jpg`)
           .then((url) => {
             import("firebase/firestore").then(({ doc: fsDoc, updateDoc }) => {
@@ -326,7 +335,7 @@ export default function LedgerPage() {
       addDoc(collection(db, "activityLogs"), {
         organizationId: orgId, userId: auth.currentUser?.uid || "", userName: auth.currentUser?.displayName || "",
         action: "INCOME_ADDED", description: `${incomeTypes[incomeForm.type]?.label} income: ${fmtPKR(Number(incomeForm.amount))}`,
-        createdAt: serverTimestamp(), syncStatus: isOnline ? "synced" : "pending",
+        createdAt: serverTimestamp(), syncStatus: "synced",
       }).catch(console.error);
 
     } catch (e) { console.error(e); setFormError("Failed to save. Try again."); setSaving(false); }
@@ -364,21 +373,30 @@ export default function LedgerPage() {
         syncStatus: isOnline ? "synced" : "pending",
       };
 
-      // 1. Race write against 6s timeout — resolves from local cache when offline
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 6000)
-      );
-      const writePromise = addDoc(collection(db, "transactions"), payload);
-      const docRef = await Promise.race([writePromise, timeout]).catch(() => writePromise);
+      if (!isOnline) {
+        // Offline: Firestore queues the write locally — never await, show success immediately
+        addDoc(collection(db, "transactions"), payload).catch(console.error);
+        addDoc(collection(db, "activityLogs"), {
+          organizationId: orgId, userId: auth.currentUser?.uid || "", userName: auth.currentUser?.displayName || "",
+          action: "EXPENSE_ADDED", description: `${expenseCategories[expenseForm.category]?.label} expense: ${fmtPKR(Number(expenseForm.amount))}`,
+          createdAt: serverTimestamp(), syncStatus: "pending",
+        }).catch(console.error);
+        notifyOfflineSave("Expense");
+        setSuccessMsg({ title: "Saved Offline 📶", sub: `−${fmtPKR(Number(expenseForm.amount))} (${expenseCategories[expenseForm.category]?.label}) · will sync when connected` });
+        setSuccess(true);
+        setSaving(false);
+        return;
+      }
 
-      // 2. Show success immediately
-      if (!isOnline) notifyOfflineSave("Expense");
-      setSuccessMsg({ title: isOnline ? "Expense Saved! ✅" : "Saved Offline 📶", sub: `−${fmtPKR(Number(expenseForm.amount))} (${expenseCategories[expenseForm.category]?.label})` });
+      // Online: await the write normally
+      const docRef = await addDoc(collection(db, "transactions"), payload);
+
+      setSuccessMsg({ title: "Expense Saved! ✅", sub: `−${fmtPKR(Number(expenseForm.amount))} (${expenseCategories[expenseForm.category]?.label})` });
       setSuccess(true);
       setSaving(false);
 
-      // 3. Upload receipt in background (skip when offline — Storage has no offline queue)
-      if (receiptFile && isOnline) {
+      // Upload receipt in background (skip when offline — Storage has no offline queue)
+      if (receiptFile) {
         uploadPhoto(receiptFile, `receipts/${orgId}/${docRef.id}_receipt.jpg`)
           .then((url) => {
             import("firebase/firestore").then(({ doc: fsDoc, updateDoc }) => {
@@ -391,7 +409,7 @@ export default function LedgerPage() {
       addDoc(collection(db, "activityLogs"), {
         organizationId: orgId, userId: auth.currentUser?.uid || "", userName: auth.currentUser?.displayName || "",
         action: "EXPENSE_ADDED", description: `${expenseCategories[expenseForm.category]?.label} expense: ${fmtPKR(Number(expenseForm.amount))}`,
-        createdAt: serverTimestamp(), syncStatus: isOnline ? "synced" : "pending",
+        createdAt: serverTimestamp(), syncStatus: "synced",
       }).catch(console.error);
 
     } catch (e) { console.error(e); setFormError("Failed to save. Try again."); setSaving(false); }

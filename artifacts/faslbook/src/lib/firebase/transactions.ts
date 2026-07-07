@@ -66,21 +66,27 @@ export async function addTransaction(
   toastLabel?: string
 ): Promise<string> {
   const online = navigator.onLine;
-  const docRef = await addDoc(collection(db, "transactions"), {
+  const payload = {
     ...input,
     createdBy: auth.currentUser?.uid || "",
     createdByName: auth.currentUser?.displayName || "",
     createdAt: serverTimestamp(),
     syncStatus: online ? "synced" : "pending",
-  });
+  };
+
   if (!online) {
+    // Offline: fire-and-forget — Firestore queues the write locally, never hangs
+    addDoc(collection(db, "transactions"), payload).catch(console.error);
     const typeLabels: Record<string, string> = {
       income: "Income", expense: "Expense",
       dealerPurchase: "Purchase", dealerPayment: "Payment",
       loanTaken: "Loan", loanRepayment: "Repayment", inventory: "Inventory",
     };
     notifyOfflineSave(toastLabel || typeLabels[input.type] || "Transaction");
+    return ""; // ID not available offline — callers must not rely on it when offline
   }
+
+  const docRef = await addDoc(collection(db, "transactions"), payload);
   return docRef.id;
 }
 
