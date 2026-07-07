@@ -1,6 +1,6 @@
-# [Project name]
+# FaslBook
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A social/content platform with Firebase auth, a React frontend, and an Express API backend.
 
 ## Run & Operate
 
