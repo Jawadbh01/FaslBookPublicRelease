@@ -342,6 +342,7 @@ export default function PrintHubPage() {
                 categoryLabel: e.categoryLabel || "Other",
                 amount: Number(e.amount) || 0,
                 paymentMethod: e.paymentMethod || "cash",
+                vendor: e.vendor || "",
                 description: e.description || "",
               };
             })

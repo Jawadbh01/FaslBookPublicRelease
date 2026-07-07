@@ -7,6 +7,7 @@ interface OwnerExpense {
   amount: number;
   date: string;
   paymentMethod: string;
+  vendor: string;
   description: string;
 }
 
@@ -19,14 +20,14 @@ interface Props {
 }
 
 const PAYMENT_LABELS: Record<string, string> = {
-  cash: "Cash", bank: "Bank Transfer", card: "Card",
+  cash: "Cash", bank: "Bank Transfer",
   cheque: "Cheque", jazzcash: "JazzCash/EasyPaisa",
 };
 
 const CATEGORY_EMOJIS: Record<string, string> = {
-  transport: "🚗", food: "🍽️", utilities: "💡", rent: "🏠",
-  medical: "🏥", office: "📎", staff: "👥", shopping: "🛍️",
-  entertainment: "🎬", other: "💰",
+  fuel: "⛽", tractor: "🔧", machinery: "🚜", irrigation: "💧",
+  land_prep: "🌾", labour: "👷", seeds: "🌱", fertilizer: "🧪",
+  pesticide: "🪣", transport: "🚛", utilities: "💡", other: "💰",
 };
 
 function fmtD(s: string) {
@@ -40,7 +41,6 @@ const fmt = (n: number) => "Rs. " + Math.round(n).toLocaleString("en-PK");
 export default function OwnerExpensesTemplate({ expenses, farmName, printedBy, dateFrom, dateTo }: Props) {
   const total = expenses.reduce((s, e) => s + e.amount, 0);
 
-  // Group by category for summary
   const byCat: Record<string, number> = {};
   expenses.forEach((e) => { byCat[e.categoryLabel] = (byCat[e.categoryLabel] || 0) + e.amount; });
   const catEntries = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
@@ -52,12 +52,12 @@ export default function OwnerExpensesTemplate({ expenses, farmName, printedBy, d
 
   return (
     <PrintLayout
-      reportName="Owner Expenses Report"
+      reportName="Farm Expenses Report"
       farmName={farmName}
       printedBy={printedBy}
       filters={filters}
     >
-      {/* Summary cards */}
+      {/* Summary */}
       <div className="print-section-compact">
         <div className="section-title">Summary</div>
         <div className="info-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: "4px 20px" }}>
@@ -70,14 +70,14 @@ export default function OwnerExpensesTemplate({ expenses, farmName, printedBy, d
         </div>
       </div>
 
-      {/* By category breakdown */}
+      {/* By category */}
       {catEntries.length > 0 && (
         <div className="print-section-compact">
-          <div className="section-title">Expenses by Category</div>
+          <div className="section-title">Expenses by Type</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 20px" }}>
             {catEntries.map(([cat, amt]) => (
               <div key={cat} className="summary-row" style={{ minWidth: 180, flex: "1 1 180px" }}>
-                <span>{CATEGORY_EMOJIS[cat.toLowerCase()] || "💰"} {cat}</span>
+                <span>{CATEGORY_EMOJIS[cat.toLowerCase().replace(/ /g,"_")] || "💰"} {cat}</span>
                 <span style={{ fontWeight: 600, color: "#C62828" }}>{fmt(amt)}</span>
               </div>
             ))}
@@ -89,7 +89,7 @@ export default function OwnerExpensesTemplate({ expenses, farmName, printedBy, d
         </div>
       )}
 
-      {/* Detailed transactions table */}
+      {/* Detail table */}
       <div className="print-section">
         <div className="section-title">Expense Details</div>
         {expenses.length === 0 ? (
@@ -99,10 +99,11 @@ export default function OwnerExpensesTemplate({ expenses, farmName, printedBy, d
             <thead>
               <tr>
                 <th style={{ width: "10%" }}>Date</th>
-                <th style={{ width: "18%" }}>Category</th>
-                <th style={{ width: "16%" }}>Payment</th>
-                <th>Description</th>
-                <th className="num" style={{ width: "16%" }}>Amount</th>
+                <th style={{ width: "18%" }}>Type</th>
+                <th style={{ width: "18%" }}>Vendor / Supplier</th>
+                <th style={{ width: "14%" }}>Payment</th>
+                <th>Notes</th>
+                <th className="num" style={{ width: "14%" }}>Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -110,6 +111,7 @@ export default function OwnerExpensesTemplate({ expenses, farmName, printedBy, d
                 <tr key={e.id}>
                   <td>{fmtD(e.date)}</td>
                   <td>{CATEGORY_EMOJIS[e.category] || ""} {e.categoryLabel}</td>
+                  <td>{e.vendor || "—"}</td>
                   <td>{PAYMENT_LABELS[e.paymentMethod] || e.paymentMethod}</td>
                   <td>{e.description || "—"}</td>
                   <td className="num" style={{ color: "#C62828", fontWeight: 600 }}>{fmt(e.amount)}</td>
@@ -118,7 +120,7 @@ export default function OwnerExpensesTemplate({ expenses, farmName, printedBy, d
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={4} style={{ textAlign: "right", paddingRight: 12 }}>Total</td>
+                <td colSpan={5} style={{ textAlign: "right", paddingRight: 12 }}>Total</td>
                 <td className="num">{fmt(total)}</td>
               </tr>
             </tfoot>
