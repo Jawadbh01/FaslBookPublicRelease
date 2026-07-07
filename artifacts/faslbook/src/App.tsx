@@ -40,6 +40,7 @@ import ReportsPage from "@/pages/reports/page";
 import PrintHubPage from "@/pages/reports/print/page";
 import SeasonsPage from "@/pages/seasons/page";
 import CropCycleDetailPage from "@/pages/crop-cycles/[id]/page";
+import OwnerExpensesPage from "@/pages/owner-expenses/page";
 
 function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -147,6 +148,9 @@ function AnimatedSwitch() {
         </Route>
         <Route path="/crop-cycles/:id">
           {() => <DashboardLayout><CropCycleDetailPage /></DashboardLayout>}
+        </Route>
+        <Route path="/owner-expenses">
+          {() => <DashboardLayout><OwnerExpensesPage /></DashboardLayout>}
         </Route>
         <Route path="/reports/print">
           {() => <DashboardLayout><PrintHubPage /></DashboardLayout>}

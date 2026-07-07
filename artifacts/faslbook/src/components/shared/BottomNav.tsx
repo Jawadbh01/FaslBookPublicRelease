@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { House, BookOpen, Warehouse, Handshake, Users } from "lucide-react";
+import { House, BookOpen, Warehouse, Handshake, Users, Crown } from "lucide-react";
 import { useLangStore } from "@/store/langStore";
 import { useCallback } from "react";
 
@@ -15,11 +15,12 @@ export default function BottomNav() {
   const { t }      = useLangStore();
 
   const navItems = [
-    { href: "/overview",  labelKey: "home",   icon: House },
-    { href: "/ledger",    labelKey: "khata",  icon: BookOpen },
-    { href: "/inventory", labelKey: "godown", icon: Warehouse },
-    { href: "/dealers",   labelKey: "dealer", icon: Handshake },
-    { href: "/workers",   labelKey: "team",   icon: Users },
+    { href: "/overview",        labelKey: "home",   icon: House },
+    { href: "/ledger",          labelKey: "khata",  icon: BookOpen },
+    { href: "/inventory",       labelKey: "godown", icon: Warehouse },
+    { href: "/dealers",         labelKey: "dealer", icon: Handshake },
+    { href: "/workers",         labelKey: "team",   icon: Users },
+    { href: "/owner-expenses",  label: "Owner",     icon: Crown },
   ];
 
   const handleTap = useCallback(() => haptic(), []);
@@ -28,21 +29,22 @@ export default function BottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-50 shadow-[0_-2px_16px_rgba(0,0,0,0.07)]"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
       <div className="flex items-center justify-around h-16">
-        {navItems.map(({ href, labelKey, icon: Icon }) => {
+        {navItems.map(({ href, labelKey, label, icon: Icon }) => {
           const isActive = pathname === href || (href !== "/overview" && pathname.startsWith(href));
+          const displayLabel = label ?? (labelKey ? t(labelKey) : "");
           return (
             <Link
               key={href}
               href={href}
               onClick={handleTap}
-              className="relative flex flex-col items-center gap-0.5 px-3 py-1 text-xs select-none tap-highlight-none"
+              className="relative flex flex-col items-center gap-0.5 px-2 py-1 text-xs select-none tap-highlight-none"
               style={{ WebkitTapHighlightColor: "transparent" }}
             >
               {/* Active pill background */}
               <span
                 className="absolute top-0.5 rounded-full transition-all duration-300 ease-out"
                 style={{
-                  width:           isActive ? 48 : 0,
+                  width:           isActive ? 44 : 0,
                   height:          isActive ? 28 : 0,
                   backgroundColor: isActive ? "#E8F5E9" : "transparent",
                   left: "50%",
@@ -54,7 +56,7 @@ export default function BottomNav() {
                 style={{ transform: isActive ? "translateY(-1px) scale(1.1)" : "scale(1)" }}
               >
                 <Icon
-                  size={22}
+                  size={20}
                   color={isActive ? ACTIVE_COLOR : INACTIVE_COLOR}
                   strokeWidth={isActive ? 2.5 : 1.8}
                 />
@@ -63,11 +65,11 @@ export default function BottomNav() {
                 className="relative z-10 font-medium transition-all duration-200"
                 style={{
                   color:    isActive ? ACTIVE_COLOR : INACTIVE_COLOR,
-                  fontSize: isActive ? "10px" : "10px",
+                  fontSize: "9px",
                   fontWeight: isActive ? 700 : 500,
                 }}
               >
-                {t(labelKey)}
+                {displayLabel}
               </span>
             </Link>
           );

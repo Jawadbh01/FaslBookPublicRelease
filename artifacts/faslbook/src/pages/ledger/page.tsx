@@ -158,7 +158,7 @@ export default function LedgerPage() {
   const [receiptViewUrl, setReceiptViewUrl] = useState<string | null>(null);
   const [detailEntry, setDetailEntry] = useState<LedgerEntry | null>(null);
   const [editMode, setEditMode] = useState(false);
-  const [editForm, setEditForm] = useState({ amount: "", date: "", notes: "" });
+  const [editForm, setEditForm] = useState({ amount: "", date: "", notes: "", description: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editSaved, setEditSaved] = useState(false);
 
@@ -179,7 +179,7 @@ export default function LedgerPage() {
 
   // ── Expense form ───────────────────────────────────────────
   const [expenseForm, setExpenseForm] = useState({
-    category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", cropCycleId: "", seasonId: "", notes: "",
+    category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", cropCycleId: "", seasonId: "", notes: "", description: "",
   });
   const [receiptFile, setReceiptFile]       = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState("");
@@ -255,7 +255,7 @@ export default function LedgerPage() {
     const active = cropCycles.find((c) => c.status === "Active") || cropCycles[0];
     setIncomeForm({ type: "cropSale", amount: "", date: todayStr(), parcelId: "", farmerId: "", cropCycleId: active?.id || "", seasonId: active?.seasonId || "", notes: "" });
     setIncomeProofFile(null); setIncomeProofPreview(""); incomeLocation.reset();
-    setExpenseForm({ category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", cropCycleId: active?.id || "", seasonId: active?.seasonId || "", notes: "" });
+    setExpenseForm({ category: "fertilizer", amount: "", date: todayStr(), parcelId: "", dealerId: "", farmerId: "", cropCycleId: active?.id || "", seasonId: active?.seasonId || "", notes: "", description: "" });
     setReceiptFile(null); setReceiptPreview(""); expenseLocation.reset();
     setFormError(""); setSuccess(false);
   };
@@ -362,11 +362,12 @@ export default function LedgerPage() {
         category: expenseForm.category,
         categoryLabel: expenseCategories[expenseForm.category]?.label || expenseForm.category,
         amount: Number(expenseForm.amount), date: expenseForm.date,
-        description: expenseCategories[expenseForm.category]?.label || expenseForm.category,
+        description: expenseForm.description || expenseCategories[expenseForm.category]?.label || expenseForm.category,
         parcelId: expenseForm.parcelId, parcelName: parcel?.name || "",
         dealerId: expenseForm.dealerId || "", dealerName: dealer?.name || "",
         farmerId: expenseForm.farmerId, farmerName: farmer?.name || "",
-        notes: expenseForm.notes, receiptUrl: "",
+        notes: expenseForm.notes,
+        receiptUrl: "",
         location: expenseLocation.location || null,
         createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
@@ -703,6 +704,14 @@ export default function LedgerPage() {
         {expenseLocation.location && <p className="text-green-700 text-xs mb-4 ml-1">✅ Location detected</p>}
         {!expenseLocation.location && <div className="mb-4" />}
 
+        {/* Description */}
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Description (Optional)</label>
+        <div className="border border-gray-200 rounded-2xl px-4 py-3 mb-4 bg-white">
+          <textarea placeholder="Brief description of this expense" value={expenseForm.description}
+            onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+            rows={2} className="w-full outline-none text-gray-800 text-base bg-transparent resize-none" />
+        </div>
+
         {/* Notes */}
         <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Notes (Optional)</label>
         <div className="border border-gray-200 rounded-2xl px-4 py-3 mb-8 bg-white">
@@ -747,6 +756,7 @@ export default function LedgerPage() {
             amount: String(detailEntry.amount),
             date: detailEntry.date,
             notes: detailEntry.notes || "",
+            description: (detailEntry as any).description || "",
           });
           setEditMode(true);
         };
@@ -759,6 +769,7 @@ export default function LedgerPage() {
               amount: Number(editForm.amount),
               date: editForm.date,
               notes: editForm.notes,
+              description: editForm.description,
               edited: true,
               editedAt: serverTimestamp(),
               editedBy: auth.currentUser?.uid || null,
@@ -821,6 +832,12 @@ export default function LedgerPage() {
                         <span className="text-gray-800 text-sm font-medium">{detailEntry.dealerName}</span>
                       </div>
                     )}
+                    {(detailEntry as any).description && (detailEntry as any).description !== (detailEntry.categoryLabel || detailEntry.category) && (
+                      <div className="py-2 border-b border-gray-50">
+                        <span className="text-gray-500 text-sm block mb-1">Description</span>
+                        <span className="text-gray-800 text-sm">{(detailEntry as any).description}</span>
+                      </div>
+                    )}
                     {detailEntry.notes && (
                       <div className="py-2">
                         <span className="text-gray-500 text-sm block mb-1">Notes</span>
@@ -856,6 +873,15 @@ export default function LedgerPage() {
                       value={editForm.date}
                       onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
                       className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700"
+                    />
+                  </div>
+                  <div className="mb-4">
+                    <label className="text-gray-600 text-sm font-medium mb-2 block">Description</label>
+                    <textarea
+                      value={editForm.description}
+                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      rows={2}
+                      className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base resize-none focus:border-green-700"
                     />
                   </div>
                   <div className="mb-2">

@@ -14,6 +14,7 @@ import SalesReportTemplate    from "./SalesReportTemplate";
 import FarmSummaryTemplate    from "./FarmSummaryTemplate";
 import DealerReportTemplate   from "./DealerReportTemplate";
 import WorkersReportTemplate  from "./WorkersReportTemplate";
+import OwnerExpensesTemplate  from "./OwnerExpensesTemplate";
 
 // ── Label maps ────────────────────────────────────────────────
 const INCOME_LABELS: Record<string,string> = {
@@ -70,6 +71,7 @@ const REPORTS = [
   { key:"dealer",  label:"Dealer Report",        icon:"🤝", desc:"Purchases, payments & outstanding balance" },
   { key:"workers", label:"Workers Report",       icon:"👷", desc:"Attendance and wages for daily/monthly staff" },
   { key:"summary", label:"Farm Summary",         icon:"🏡", desc:"One-page executive overview" },
+  { key:"owner",   label:"Owner Expenses",       icon:"👤", desc:"Personal/owner expenses by date range" },
 ];
 
 // ── Single-field query helper (avoids composite index requirement) ───
@@ -126,6 +128,7 @@ export default function PrintHubPage() {
   const [summaryData,    setSummaryData]    = useState<any>(null);
   const [reportWorkers,  setReportWorkers]  = useState<any[]>([]);
   const [reportAttendance, setReportAttendance] = useState<any[]>([]);
+  const [ownerExpenses, setOwnerExpenses]  = useState<any[]>([]);
 
   // ── Load farmers & parcels once ───────────────────────────────
   // NOTE: uses single-field query only (no workerType compound) to avoid
@@ -327,6 +330,27 @@ export default function PrintHubPage() {
           break;
         }
 
+        // ── Owner Expenses ────────────────────────────────────────
+        case "owner": {
+          const all = await getOrgDocs("ownerExpenses", orgId);
+          const rows = all
+            .map((e: any) => {
+              const date = e.date ? (typeof e.date === "string" ? e.date : e.date.toDate?.()?.toISOString().split("T")[0] || "") : "";
+              return {
+                id: e.id, date,
+                category: e.category || "other",
+                categoryLabel: e.categoryLabel || "Other",
+                amount: Number(e.amount) || 0,
+                paymentMethod: e.paymentMethod || "cash",
+                description: e.description || "",
+              };
+            })
+            .filter((e: any) => (!dateFrom || !e.date || e.date >= dateFrom) && (!dateTo || !e.date || e.date <= dateTo))
+            .sort((a: any, b: any) => a.date.localeCompare(b.date));
+          setOwnerExpenses(rows);
+          break;
+        }
+
         // ── Farm Summary ──────────────────────────────────────────
         // Single-field queries only, filter workerType/type client-side
         case "summary": {
@@ -418,6 +442,10 @@ export default function PrintHubPage() {
       );
       if (activeReport==="workers") return (
         <WorkersReportTemplate workers={reportWorkers} attendance={reportAttendance} farmName={orgName}
+          printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
+      );
+      if (activeReport==="owner") return (
+        <OwnerExpensesTemplate expenses={ownerExpenses} farmName={orgName}
           printedBy={printedBy} dateFrom={dateFrom} dateTo={dateTo} />
       );
       if (activeReport==="summary" && summaryData) return (
@@ -546,7 +574,7 @@ export default function PrintHubPage() {
               </div>
             )}
 
-            {["ledger","cropCycle","sales","godown","dealer"].includes(activeReport) && (
+            {["ledger","cropCycle","sales","godown","dealer","owner"].includes(activeReport) && (
               <div className="grid grid-cols-2 gap-3">
                 <DateInput label="From" value={dateFrom} onChange={setDateFrom} />
                 <DateInput label="To"   value={dateTo}   onChange={setDateTo} />
