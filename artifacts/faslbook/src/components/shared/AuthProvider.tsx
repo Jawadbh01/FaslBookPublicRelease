@@ -110,6 +110,19 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       try {
         const userSnap = await getDoc(doc(db, "users", firebaseUser.uid));
         if (!userSnap.exists()) {
+          // Guard: if the user is ALREADY on an onboarding page, do NOT redirect.
+          // This prevents an AuthProvider race where onAuthStateChanged fires right
+          // after createUserWithEmailAndPassword (before register/page.tsx has
+          // finished writing the users doc), which would loop:
+          //   register → /role-select → /create-farm → /role-select → ...
+          const alreadyOnboarding = ONBOARDING_PAGES.some(
+            (p) => path === p || path.startsWith(p + "/")
+          );
+          if (alreadyOnboarding) {
+            // User is in the middle of onboarding — let the page handle the flow.
+            setLoading(false); setReady(true);
+            return;
+          }
           clearAuthCache();
           setUser(null); setOrganization(null); setRole(null);
           setLoading(false); setReady(true);
@@ -120,7 +133,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         const userData = userSnap.data();
 
         if (!userData.role) {
-          window.location.replace("/role-select");
+          // No role yet — only redirect if NOT already on role-select or onboarding
+          const alreadyOnboarding = ONBOARDING_PAGES.some(
+            (p) => path === p || path.startsWith(p + "/")
+          );
+          if (!alreadyOnboarding) {
+            window.location.replace("/role-select");
+          }
           setReady(true); return;
         }
 
@@ -134,10 +153,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
         }
 
         if (!userData.organizationId) {
-          if (userData.role === "landlord") {
-            window.location.replace("/create-farm");
-          } else {
-            window.location.replace("/join-farm");
+          // Only redirect if NOT already on the correct onboarding page
+          const targetPage = userData.role === "landlord" ? "/create-farm" : "/join-farm";
+          if (path !== targetPage) {
+            window.location.replace(targetPage);
           }
           setReady(true); return;
         }

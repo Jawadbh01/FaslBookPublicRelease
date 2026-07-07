@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/config";
 import { Wheat, Users, ArrowLeft, Loader2 } from "lucide-react";
 
@@ -35,19 +35,37 @@ export default function RoleSelectPage() {
 
   const handleSelect = async (roleId: string) => {
     const user = auth.currentUser;
-    if (user && isGoogleUser) {
+    if (user) {
       try {
         setSelecting(roleId);
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
         if (userSnap.exists()) {
+          // Doc exists — update role only
           await updateDoc(userRef, { role: roleId, updatedAt: serverTimestamp() });
+        } else {
+          // Doc does NOT exist yet (race: onAuthStateChanged fired before register's
+          // setDoc completed). Create it now so we never leave without a users doc.
+          await setDoc(userRef, {
+            id: user.uid,
+            name: user.displayName || "",
+            email: user.email || "",
+            phone: "",
+            photoUrl: user.photoURL || "",
+            role: roleId,
+            organizationId: null,
+            status: "pending",
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            syncStatus: "synced",
+          });
         }
         window.location.replace(roleId === "landlord" ? "/create-farm" : "/join-farm");
       } catch {
         setSelecting(null);
       }
     } else {
+      // Not signed in — go to the email register page
       window.location.href = `/register?role=${roleId}`;
     }
   };
