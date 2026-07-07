@@ -8,6 +8,7 @@ import {
 import { auth } from "@/lib/firebase/config";
 import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import { useLangStore } from "@/store/langStore";
 import {
   MapPin, Plus, Search, X, ChevronRight,
@@ -118,6 +119,7 @@ export default function ParcelsPage() {
       } else {
         await addDoc(collection(db, "parcels"), data);
       }
+      if (!navigator.onLine) notifyOfflineSave("Parcel");
       await addDoc(collection(db, "activityLogs"), {
         organizationId: currentOrgId,
         userId: auth.currentUser?.uid || "",

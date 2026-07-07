@@ -3,6 +3,7 @@ import AuthProvider from "@/components/shared/AuthProvider";
 import BottomNav from "@/components/shared/BottomNav";
 import ConditionalTopBar from "@/components/shared/ConditionalTopBar";
 import SyncIndicator from "@/components/shared/SyncIndicator";
+import OfflineSaveToast from "@/components/shared/OfflineSaveToast";
 
 // Auth pages
 import LoginPage from "@/pages/login/page";
@@ -189,6 +190,7 @@ function App() {
     <AuthProvider>
       <WouterRouter base={import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}>
         <SyncIndicator />
+        <OfflineSaveToast />
         <AnimatedSwitch />
       </WouterRouter>
     </AuthProvider>

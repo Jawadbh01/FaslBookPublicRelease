@@ -11,6 +11,7 @@ import {
   addDoc, serverTimestamp,
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 
 export type TransactionType =
   | "income"
@@ -61,15 +62,25 @@ export function subscribeTransactions(orgId: string, cb: (txns: Transaction[]) =
 }
 
 export async function addTransaction(
-  input: Omit<Transaction, "id" | "createdAt" | "createdBy" | "createdByName">
+  input: Omit<Transaction, "id" | "createdAt" | "createdBy" | "createdByName">,
+  toastLabel?: string
 ): Promise<string> {
+  const online = navigator.onLine;
   const docRef = await addDoc(collection(db, "transactions"), {
     ...input,
     createdBy: auth.currentUser?.uid || "",
     createdByName: auth.currentUser?.displayName || "",
     createdAt: serverTimestamp(),
-    syncStatus: "synced",
+    syncStatus: online ? "synced" : "pending",
   });
+  if (!online) {
+    const typeLabels: Record<string, string> = {
+      income: "Income", expense: "Expense",
+      dealerPurchase: "Purchase", dealerPayment: "Payment",
+      loanTaken: "Loan", loanRepayment: "Repayment", inventory: "Inventory",
+    };
+    notifyOfflineSave(toastLabel || typeLabels[input.type] || "Transaction");
+  }
   return docRef.id;
 }
 

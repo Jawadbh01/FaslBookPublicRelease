@@ -7,6 +7,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import {
   Plus, X, Loader2, User,
@@ -135,7 +136,7 @@ export default function LoansPage() {
         organizationId: orgId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        syncStatus: "synced",
+        syncStatus: navigator.onLine ? "synced" : "pending",
       });
 
       await addDoc(collection(db, "transactions"), {
@@ -152,8 +153,9 @@ export default function LoansPage() {
         notes: form.notes,
         createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
+        syncStatus: navigator.onLine ? "synced" : "pending",
       });
+      if (!navigator.onLine) notifyOfflineSave("Loan");
 
       await addDoc(collection(db, "activityLogs"), {
         organizationId: orgId,

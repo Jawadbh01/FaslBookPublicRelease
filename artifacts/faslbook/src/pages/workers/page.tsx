@@ -5,6 +5,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import {
   Plus, X, Loader2, Phone, ClipboardList,
   ChevronRight, User, Wheat, CheckCircle, XCircle, Clock,
@@ -136,6 +137,7 @@ export default function WorkersPage() {
       } else {
         await addDoc(collection(db, "workers"), { ...payload, createdAt: serverTimestamp() });
       }
+      if (!navigator.onLine) notifyOfflineSave("Farmer");
       closeModal();
     } catch { setError("Failed to save. Try again."); }
     finally { setSaving(false); }
@@ -159,6 +161,7 @@ export default function WorkersPage() {
       } else {
         await addDoc(collection(db, "workers"), { ...payload, createdAt: serverTimestamp() });
       }
+      if (!navigator.onLine) notifyOfflineSave("Worker");
       closeModal();
     } catch { setError("Failed to save. Try again."); }
     finally { setSaving(false); }

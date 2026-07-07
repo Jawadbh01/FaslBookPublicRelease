@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { WifiOff, RefreshCw, CheckCircle2, Download, X } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { downloadOfflineData } from "@/lib/offlineCache";
+import { getPendingCount } from "@/lib/offlineSync";
 
 export default function SyncIndicator({ iconColor = "#1B5E20" }: { iconColor?: string }) {
   const { state, syncNow } = useSyncStatus();
@@ -13,8 +14,17 @@ export default function SyncIndicator({ iconColor = "#1B5E20" }: { iconColor?: s
   const [caching, setCaching]     = useState(false);
   const [cached, setCached]       = useState(false);
   const [cacheError, setCacheError] = useState("");
+  const [pendingCount, setPendingCount] = useState(getPendingCount);
   const setupDismissed = useRef(false);
   const prevState = useRef(state);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setPendingCount((e as CustomEvent<number>).detail);
+    };
+    window.addEventListener("faslbook:pending-changed", handler);
+    return () => window.removeEventListener("faslbook:pending-changed", handler);
+  }, []);
 
   // Show "pill" for syncing/synced states
   useEffect(() => {
@@ -69,7 +79,14 @@ export default function SyncIndicator({ iconColor = "#1B5E20" }: { iconColor?: s
           style={{ backgroundColor: "#B71C1C" }}>
           <div className="flex items-center gap-2">
             <WifiOff size={14} className="shrink-0" />
-            <span>Offline — changes save automatically when connected</span>
+            <div>
+              <span>Offline — saves queued locally</span>
+              {pendingCount > 0 && (
+                <span className="ml-1 bg-white/25 rounded-full px-1.5 py-0.5 text-[10px]">
+                  {pendingCount} pending
+                </span>
+              )}
+            </div>
           </div>
           <button onClick={syncNow}
             className="flex items-center gap-1 bg-white/20 hover:bg-white/30 rounded-full px-2.5 py-1 text-white text-[11px] font-bold transition-colors">

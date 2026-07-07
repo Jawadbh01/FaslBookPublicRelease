@@ -21,10 +21,19 @@ description: Key decisions for FaslBook farm OS — auth model, data model, colo
 - `organizations` collection: farm data
 - `users` collection: authenticated users (landlord, manager only in practice)
 
-## Offline mode
-- SyncIndicator detects offline + no localStorage cache → shows download prompt card
+## Offline mode — full implementation
+- Firebase `persistentLocalCache` auto-queues all Firestore writes offline
+- `src/lib/offlineSync.ts` — `notifyOfflineSave(label?)` increments localStorage counter + fires `faslbook:offline-save` CustomEvent; `clearPending()` fires `faslbook:sync-complete`
+- `src/components/shared/OfflineSaveToast.tsx` — global floating pill: dark "Saved offline" on write, green "All synced!" on reconnect. Mounted once in App.tsx.
+- `src/components/shared/SyncIndicator.tsx` — red offline banner shows `{pendingCount} pending` badge
+- `src/lib/hooks/useSyncStatus.ts` — calls `clearPending()` on online event
+- `src/lib/offlineCache.ts` — pre-caches `seasons` + `transactions`
+- SyncIndicator also detects offline + no localStorage cache → shows download prompt card
 - /offline route: full-screen offline page with Try Again + Download Data buttons
 - Cache keys: faslbook_user_cache, faslbook_org_cache
+
+## Offline notify coverage
+`addTransaction` (transactions.ts) auto-calls `notifyOfflineSave` — covers all income/expense/loan/dealer/farmer/worker financial writes. Direct-addDoc pages also call `if (!navigator.onLine) notifyOfflineSave(label)`: dealers (metadata + tx), loans (metadata + tx), parcels, inventory (add/stock-in/out), attendance, workers (farmer + worker save), crops.
 
 ## Firebase Storage
 - Upload code is correct in uploadPhoto.ts

@@ -7,6 +7,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import { runFarmerTransferWorkflow } from "@/lib/workflows/farmerTransferWorkflow";
 import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import { categoryConfig } from "./_categoryConfig";
@@ -138,16 +139,19 @@ export default function GodownPage() {
         name: itemForm.name.trim(), category: itemForm.category, unit: itemForm.unit,
         currentStock: Number(itemForm.initialStock) || 0,
         pricePerUnit: Number(itemForm.pricePerUnit) || 0,
-        organizationId: orgId, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), syncStatus: "synced",
+        organizationId: orgId, createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        syncStatus: navigator.onLine ? "synced" : "pending",
       });
       if (Number(itemForm.initialStock) > 0) {
         await addDoc(collection(db, "inventoryTransactions"), {
           organizationId: orgId, itemId: ref.id, itemName: itemForm.name.trim(),
           type: "in", source: "Adjustment", quantity: Number(itemForm.initialStock),
           unit: itemForm.unit, notes: "Opening stock",
-          createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(), syncStatus: "synced",
+          createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(),
+          syncStatus: navigator.onLine ? "synced" : "pending",
         });
       }
+      if (!navigator.onLine) notifyOfflineSave("Inventory Item");
       goBack();
     } catch { setFormError("Failed to add item. Try again."); }
     finally { setSaving(false); }
@@ -166,8 +170,10 @@ export default function GodownPage() {
         organizationId: orgId, itemId: selected.id, itemName: selected.name,
         type: "in", source: inForm.source, quantity: Number(inForm.quantity),
         unit: selected.unit, notes: inForm.notes,
-        createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(), syncStatus: "synced",
+        createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(),
+        syncStatus: navigator.onLine ? "synced" : "pending",
       });
+      if (!navigator.onLine) notifyOfflineSave("Stock In");
       setSuccessMsg({ title: "Stock Added! ✅", sub: `+${inForm.quantity} ${selected.unit} added to ${selected.name}` });
       setSuccess(true);
     } catch { setFormError("Failed to update stock. Try again."); }
@@ -190,8 +196,10 @@ export default function GodownPage() {
         organizationId: orgId, itemId: selected.id, itemName: selected.name,
         type: "out", source: outForm.reason, quantity: Number(outForm.quantity),
         unit: selected.unit, notes: outForm.notes,
-        createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(), syncStatus: "synced",
+        createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(),
+        syncStatus: navigator.onLine ? "synced" : "pending",
       });
+      if (!navigator.onLine) notifyOfflineSave("Stock Out");
       setSuccessMsg({ title: "Stock Out Done! 📤", sub: `−${outForm.quantity} ${selected.unit} of ${selected.name} (${outForm.reason})` });
       setSuccess(true);
     } catch { setFormError("Failed. Try again."); }

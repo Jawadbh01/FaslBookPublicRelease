@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import { subscribeCropCycles, type CropCycle } from "@/lib/firebase/cropCycles";
 import {
   Plus, X, Loader2, Phone, MapPin,
@@ -153,8 +154,9 @@ export default function DealersPage() {
         organizationId: orgId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-        syncStatus: "synced",
+        syncStatus: navigator.onLine ? "synced" : "pending",
       });
+      if (!navigator.onLine) notifyOfflineSave("Dealer");
       setShowAdd(false);
       setDForm({ name: "", phone: "", address: "", notes: "" });
     } catch {
@@ -203,8 +205,9 @@ export default function DealersPage() {
         notes: txForm.notes,
         createdBy: auth.currentUser?.uid || "",
         createdAt: serverTimestamp(),
-        syncStatus: "synced",
+        syncStatus: navigator.onLine ? "synced" : "pending",
       });
+      if (!navigator.onLine) notifyOfflineSave(txForm.type === "purchase" ? "Purchase" : "Payment");
 
       await addDoc(collection(db, "activityLogs"), {
         organizationId: orgId,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { enableNetwork, disableNetwork, waitForPendingWrites, onSnapshotsInSync } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { clearPending, getPendingCount } from "@/lib/offlineSync";
 
 export type SyncState = "online" | "syncing" | "synced" | "offline";
 
@@ -50,6 +51,7 @@ export function useSyncStatus() {
       saveLastSynced();
       setLastSynced(now);
       syncingRef.current = false;
+      clearPending(); // fires SYNC_COMPLETE_EVENT if there were pending writes
       setState("synced");
       setTimeout(() => setState("online"), 2500);
     };

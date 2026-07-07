@@ -8,6 +8,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import {
   Wheat, Plus, X, ChevronRight,
   Calendar, MapPin, User, Loader2,
@@ -194,6 +195,8 @@ export default function CropsPage() {
       };
 
       const docRef = await addDoc(collection(db, "crops"), cropData);
+
+      if (!navigator.onLine) notifyOfflineSave("Crop");
 
       // Update parcel current crop
       if (form.parcelId) {

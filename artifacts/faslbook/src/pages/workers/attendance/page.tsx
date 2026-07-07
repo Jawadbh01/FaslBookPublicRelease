@@ -5,6 +5,7 @@ import {
 } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase/config";
 import { useAuthStore } from "@/store/authStore";
+import { notifyOfflineSave } from "@/lib/offlineSync";
 import { ChevronLeft, ChevronRight, Loader2, History, CheckCheck, X, Calendar } from "lucide-react";
 
 interface WorkerDoc {
@@ -148,6 +149,7 @@ export default function AttendancePage() {
         description: `Attendance marked for ${ds} — ${toSave.length} workers`,
         createdAt: serverTimestamp(), syncStatus: "synced",
       });
+      if (!navigator.onLine) notifyOfflineSave("Attendance");
       setToast(`✓ Attendance saved for ${toSave.length} worker${toSave.length !== 1 ? "s" : ""}`);
       setTimeout(() => setToast(""), 2500);
     } catch (e) { console.error(e); setToast("Failed to save. Try again."); setTimeout(() => setToast(""), 2500); }
