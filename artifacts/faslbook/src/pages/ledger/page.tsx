@@ -17,7 +17,7 @@ import type { TransactionType } from "@/lib/firebase/transactions";
 import {
   ArrowLeft, Plus, TrendingUp, TrendingDown,
   ChevronLeft, ChevronRight, Loader2, CheckCircle,
-  MapPin, Camera, X, Receipt, Printer,
+  MapPin, Camera, X, Receipt, Printer, Search,
 } from "lucide-react";
 import { useLocation } from "wouter";
 
@@ -156,6 +156,7 @@ export default function LedgerPage() {
   const [successMsg, setSuccessMsg]   = useState({ title: "", sub: "" });
   const [formError, setFormError]     = useState("");
   const [receiptViewUrl, setReceiptViewUrl] = useState<string | null>(null);
+  const [search, setSearch]           = useState("");
   const [detailEntry, setDetailEntry] = useState<LedgerEntry | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState({ amount: "", date: "", notes: "", description: "" });
@@ -243,6 +244,20 @@ export default function LedgerPage() {
     const d = new Date(e.date + "T00:00:00");
     return d.getFullYear() === viewMonth.year && d.getMonth() === viewMonth.month;
   }).sort((a, b) => (b.date > a.date ? 1 : -1));
+
+  const filteredEntries = search.trim()
+    ? monthEntries.filter((e) => {
+        const q = search.toLowerCase();
+        const cfg = e.type === "credit" ? incomeTypes[e.category] : expenseCategories[e.category];
+        const label = e.categoryLabel || cfg?.label || e.category;
+        return (
+          label.toLowerCase().includes(q) ||
+          (e.dealerName || "").toLowerCase().includes(q) ||
+          (e.parcelName || "").toLowerCase().includes(q) ||
+          (e.notes || "").toLowerCase().includes(q)
+        );
+      })
+    : monthEntries;
 
   const totalCredit = monthEntries.filter((e) => e.type === "credit").reduce((s, e) => s + e.amount, 0);
   const totalDebit  = monthEntries.filter((e) => e.type === "debit").reduce((s, e) => s + e.amount, 0);
@@ -946,19 +961,24 @@ export default function LedgerPage() {
 
       {/* ── Header ── */}
       <div className="px-4 pt-12 pb-5" style={{ backgroundColor: "#1B5E20" }}>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-white text-2xl font-bold">Khata</h1>
-            <p className="text-green-200 text-xs mt-0.5">Main Khata</p>
+            <p className="text-green-200 text-xs mt-0.5">Farm ledger · income & expenses</p>
           </div>
           <button
             onClick={() => window.location.href = "/reports/print?type=ledger"}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold"
             style={{ backgroundColor: "rgba(255,255,255,0.2)", color: "white" }}
           >
-            <Printer size={14} />
-            Print
+            <Printer size={14} /> Print
           </button>
+        </div>
+        <div className="flex items-center gap-2 bg-white/15 rounded-2xl px-4 py-2.5">
+          <Search size={16} color="rgba(255,255,255,0.7)" />
+          <input type="text" placeholder="Search entries…" value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent outline-none text-white placeholder-white/60 text-sm" />
         </div>
       </div>
 
@@ -1002,72 +1022,67 @@ export default function LedgerPage() {
 
         {/* ── Transaction list ── */}
         {loading ? (
-          <div className="flex justify-center pt-16">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-100" style={{ borderTopColor: "#1B5E20" }} />
+          <div className="flex justify-center py-16">
+            <Loader2 size={28} className="animate-spin text-green-700" />
           </div>
-        ) : monthEntries.length === 0 ? (
+        ) : filteredEntries.length === 0 ? (
           <div className="flex flex-col items-center justify-center pt-16 text-center">
             <div className="text-6xl mb-4">📒</div>
-            <p className="text-gray-600 font-semibold mb-2">No entries for {monthLabel}</p>
-            <p className="text-gray-400 text-sm mb-6">Add income or expense to see them here</p>
+            <p className="text-gray-600 font-semibold mb-2">
+              {search ? "No matching entries" : `No entries for ${monthLabel}`}
+            </p>
+            <p className="text-gray-400 text-sm mb-6">
+              {search ? "Try a different search" : "Add income or expense to see them here"}
+            </p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            {monthEntries.map((entry, idx) => {
-              const isCredit  = entry.type === "credit";
-              const cfg       = isCredit ? incomeTypes[entry.category] : expenseCategories[entry.category];
-              const emoji     = cfg?.emoji || (isCredit ? "💰" : "📋");
-              const label     = entry.categoryLabel || cfg?.label || entry.category;
-              const photoUrl  = entry.receiptUrl || entry.proofUrl || "";
+          <div className="space-y-2">
+            {filteredEntries.map((entry) => {
+              const isCredit = entry.type === "credit";
+              const cfg      = isCredit ? incomeTypes[entry.category] : expenseCategories[entry.category];
+              const emoji    = cfg?.emoji || (isCredit ? "💰" : "📋");
+              const label    = entry.categoryLabel || cfg?.label || entry.category;
+              const photoUrl = entry.receiptUrl || entry.proofUrl || "";
 
               return (
-                <div key={entry.id}
-                  className={`flex items-center gap-3 px-4 py-3.5 ${idx < monthEntries.length - 1 ? "border-b border-gray-50" : ""}`}>
-                  {/* Date */}
-                  <div className="w-10 shrink-0 text-center">
-                    <p className="text-gray-400 text-xs leading-tight">{fmtDate(entry.date).split(" ")[0]}</p>
-                    <p className="text-gray-400 text-xs leading-tight">{fmtDate(entry.date).split(" ")[1]}</p>
+                <button key={entry.id}
+                  onClick={() => { setDetailEntry(entry); setEditMode(false); }}
+                  className="w-full bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm active:scale-[0.98] transition-transform text-left">
+
+                  {/* Category icon */}
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
+                    style={{ backgroundColor: cfg?.bg || (isCredit ? "#E8F5E9" : "#FFEBEE") }}>
+                    {emoji}
                   </div>
 
-                  {/* Icon */}
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: isCredit ? "#E8F5E9" : "#FFEBEE" }}>
-                    {isCredit ? <TrendingUp size={18} color="#1B5E20" /> : <TrendingDown size={18} color="#B71C1C" />}
-                  </div>
-
-                  {/* Title + details */}
-                  <button
-                    onClick={() => { setDetailEntry(entry); setEditMode(false); }}
-                    className="flex-1 min-w-0 text-left"
-                  >
-                    <p className="text-gray-800 font-semibold text-sm truncate">
-                      {emoji} {label}
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-800 font-semibold text-sm leading-tight">
+                      {label}
                       {(entry as any).edited && <span className="text-gray-400 font-normal italic text-xs"> (edited)</span>}
                     </p>
-                    <p className="text-xs" style={{ color: isCredit ? "#1B5E20" : "#B71C1C" }}>
-                      {isCredit ? "Credit" : "Debit"}{entry.parcelName ? ` • ${entry.parcelName}` : ""}
+                    <p className="text-gray-400 text-xs mt-0.5 truncate">
+                      {entry.dealerName ? `${entry.dealerName} · ` : ""}
+                      {entry.parcelName ? `${entry.parcelName} · ` : ""}
+                      {fmtDate(entry.date)}
                     </p>
                     {entry.notes ? <p className="text-gray-400 text-xs truncate">{entry.notes}</p> : null}
-                  </button>
+                  </div>
 
-                  {/* Amount + receipt button */}
-                  <div className="shrink-0 text-right flex flex-col items-end gap-1.5">
+                  {/* Amount + receipt */}
+                  <div className="shrink-0 text-right flex flex-col items-end gap-1">
                     <p className="font-bold text-base" style={{ color: isCredit ? "#1B5E20" : "#B71C1C" }}>
                       {isCredit ? "+" : "−"}{fmtPKR(entry.amount)}
                     </p>
-                    <button
-                      onClick={() => photoUrl && setReceiptViewUrl(photoUrl)}
-                      className="flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg transition-all active:scale-95"
-                      style={photoUrl
-                        ? { backgroundColor: "#E8F5E9", color: "#1B5E20" }
-                        : { backgroundColor: "#F5F5F5", color: "#BDBDBD", cursor: "default" }
-                      }
-                    >
-                      <Receipt size={11} />
-                      {photoUrl ? "Receipt" : "No Receipt"}
-                    </button>
+                    {photoUrl && (
+                      <button onClick={(e) => { e.stopPropagation(); setReceiptViewUrl(photoUrl); }}
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-lg inline-flex items-center gap-0.5"
+                        style={{ backgroundColor: "#E8F5E9", color: "#1B5E20" }}>
+                        <Receipt size={10} /> Receipt
+                      </button>
+                    )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>

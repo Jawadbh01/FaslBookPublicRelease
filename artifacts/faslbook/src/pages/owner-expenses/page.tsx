@@ -100,6 +100,7 @@ export default function OwnerExpensesPage() {
   const canEdit = role === "landlord" || role === "manager";
 
   const [expenses, setExpenses]   = useState<OwnerExpense[]>([]);
+  const [dealers, setDealers]     = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading]     = useState(true);
 
   const [view, setView]           = useState<"list" | "add">("list");
@@ -127,10 +128,12 @@ export default function OwnerExpensesPage() {
   const [deleting, setDeleting]   = useState(false);
   const [receiptViewUrl, setReceiptViewUrl] = useState<string | null>(null);
 
-  // ── Firestore listener ────────────────────────────────────
+  // ── Firestore listeners ───────────────────────────────────
   useEffect(() => {
     if (!orgId) return;
-    return onSnapshot(
+    const unsubs: (() => void)[] = [];
+
+    unsubs.push(onSnapshot(
       query(collection(db, "ownerExpenses"), where("organizationId", "==", orgId)),
       (snap) => {
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OwnerExpense))
@@ -138,7 +141,17 @@ export default function OwnerExpensesPage() {
         setExpenses(rows);
         setLoading(false);
       }
-    );
+    ));
+
+    unsubs.push(onSnapshot(
+      query(collection(db, "dealers"), where("organizationId", "==", orgId)),
+      (snap) => {
+        setDealers(snap.docs.map((d) => ({ id: d.id, name: d.data().name as string }))
+          .sort((a, b) => a.name.localeCompare(b.name)));
+      }
+    ));
+
+    return () => unsubs.forEach((u) => u());
   }, [orgId]);
 
   const filtered = expenses.filter((e) => {
@@ -318,13 +331,17 @@ export default function OwnerExpensesPage() {
           </span>
         </div>
 
-        {/* Vendor / Supplier */}
-        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Vendor / Supplier (Optional)</label>
-        <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 focus-within:border-green-700 bg-white">
-          <input type="text" placeholder="e.g. Ali Diesel Pump, Raza Workshop"
-            value={form.vendor}
+        {/* Vendor / Dealer */}
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Vendor / Dealer (Optional)</label>
+        <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-4 bg-white">
+          <select value={form.vendor}
             onChange={(e) => setForm({ ...form, vendor: e.target.value })}
-            className="w-full outline-none text-gray-800 text-base bg-transparent" />
+            className="w-full outline-none text-gray-800 text-base bg-transparent">
+            <option value="">— No vendor —</option>
+            {dealers.map((d) => (
+              <option key={d.id} value={d.name}>{d.name}</option>
+            ))}
+          </select>
         </div>
 
         {/* Payment Method */}
@@ -481,10 +498,15 @@ export default function OwnerExpensesPage() {
                       className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700" />
                   </div>
                   <div className="mb-4">
-                    <label className="text-gray-600 text-sm font-medium mb-2 block">Vendor / Supplier</label>
-                    <input type="text" value={editForm.vendor}
+                    <label className="text-gray-600 text-sm font-medium mb-2 block">Vendor / Dealer</label>
+                    <select value={editForm.vendor}
                       onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })}
-                      className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700" />
+                      className="w-full border-2 border-gray-200 rounded-2xl px-4 py-3 outline-none text-gray-800 text-base focus:border-green-700 bg-white">
+                      <option value="">— No vendor —</option>
+                      {dealers.map((d) => (
+                        <option key={d.id} value={d.name}>{d.name}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="mb-4">
                     <label className="text-gray-600 text-sm font-medium mb-2 block">Payment Method</label>
