@@ -13,6 +13,7 @@ import {
   Trash2, Pencil, CheckCircle, SlidersHorizontal, Receipt,
 } from "lucide-react";
 import { auth } from "@/lib/firebase/auth";
+import { createNotification } from "@/lib/notifications/createNotification";
 
 // ── Types ─────────────────────────────────────────────────────
 interface OwnerExpense {
@@ -210,6 +211,14 @@ export default function OwnerExpensesPage() {
         uploadReceipt(receiptFile, docRef.id)
           .then((url) => updateDoc(doc(db, "ownerExpenses", docRef.id), { receiptUrl: url }))
           .catch(console.error);
+      }
+      if (orgId) {
+        createNotification({
+          organizationId: orgId,
+          title: "Farm Expense Added 🚜",
+          description: `${cfg.label}: −${new Intl.NumberFormat("en-PK").format(Number(form.amount))} PKR${form.vendor ? ` · ${form.vendor}` : ""}${form.description ? ` — ${form.description}` : ""}`,
+          type: "farm",
+        }).catch(console.error);
       }
       setSuccess(true); setSaving(false);
     } catch (e) {

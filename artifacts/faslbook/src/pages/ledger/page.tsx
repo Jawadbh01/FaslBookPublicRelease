@@ -20,6 +20,7 @@ import {
   MapPin, Camera, X, Receipt, Printer, Search,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { createNotification } from "@/lib/notifications/createNotification";
 
 // Maps the unified Transaction.type into the credit/debit convention this
 // screen (and its totals) already use — same convention the old
@@ -353,6 +354,15 @@ export default function LedgerPage() {
         createdAt: serverTimestamp(), syncStatus: "synced",
       }).catch(console.error);
 
+      if (orgId) {
+        createNotification({
+          organizationId: orgId,
+          title: "Income Recorded 💰",
+          description: `${incomeTypes[incomeForm.type]?.label}: +${fmtPKR(Number(incomeForm.amount))}${parcel ? ` · ${parcel.name}` : ""}${farmer ? ` · ${farmer.name}` : ""}`,
+          type: "finance",
+        }).catch(console.error);
+      }
+
     } catch (e) { console.error(e); setFormError("Failed to save. Try again."); setSaving(false); }
   };
 
@@ -427,6 +437,15 @@ export default function LedgerPage() {
         action: "EXPENSE_ADDED", description: `${expenseCategories[expenseForm.category]?.label} expense: ${fmtPKR(Number(expenseForm.amount))}`,
         createdAt: serverTimestamp(), syncStatus: "synced",
       }).catch(console.error);
+
+      if (orgId) {
+        createNotification({
+          organizationId: orgId,
+          title: "Expense Recorded 🧾",
+          description: `${expenseCategories[expenseForm.category]?.label}: −${fmtPKR(Number(expenseForm.amount))}${dealer ? ` · ${dealer.name}` : ""}${parcel ? ` · ${parcel.name}` : ""}`,
+          type: "finance",
+        }).catch(console.error);
+      }
 
     } catch (e) { console.error(e); setFormError("Failed to save. Try again."); setSaving(false); }
   };
@@ -1045,9 +1064,12 @@ export default function LedgerPage() {
               const photoUrl = entry.receiptUrl || entry.proofUrl || "";
 
               return (
-                <button key={entry.id}
+                <div key={entry.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => { setDetailEntry(entry); setEditMode(false); }}
-                  className="w-full bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm active:scale-[0.98] transition-transform text-left">
+                  onKeyDown={(e) => e.key === "Enter" && (setDetailEntry(entry), setEditMode(false))}
+                  className="w-full bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm active:scale-[0.98] transition-transform cursor-pointer select-none">
 
                   {/* Category icon */}
                   <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
@@ -1075,14 +1097,18 @@ export default function LedgerPage() {
                       {isCredit ? "+" : "−"}{fmtPKR(entry.amount)}
                     </p>
                     {photoUrl && (
-                      <button onClick={(e) => { e.stopPropagation(); setReceiptViewUrl(photoUrl); }}
-                        className="text-[10px] font-semibold px-2 py-0.5 rounded-lg inline-flex items-center gap-0.5"
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); setReceiptViewUrl(photoUrl); }}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setReceiptViewUrl(photoUrl); } }}
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-lg inline-flex items-center gap-0.5 cursor-pointer"
                         style={{ backgroundColor: "#E8F5E9", color: "#1B5E20" }}>
                         <Receipt size={10} /> Receipt
-                      </button>
+                      </span>
                     )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

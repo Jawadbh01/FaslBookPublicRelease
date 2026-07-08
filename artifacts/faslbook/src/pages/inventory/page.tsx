@@ -16,6 +16,7 @@ import {
   Users, Loader2, CheckCircle, Package, Layers, Printer,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { createNotification } from "@/lib/notifications/createNotification";
 
 // ── Types ──────────────────────────────────────────────────────
 interface InventoryItem {
@@ -151,7 +152,16 @@ export default function GodownPage() {
           syncStatus: navigator.onLine ? "synced" : "pending",
         });
       }
-      if (!navigator.onLine) notifyOfflineSave("Inventory Item");
+      if (!navigator.onLine) {
+        notifyOfflineSave("Inventory Item");
+      } else if (orgId) {
+        createNotification({
+          organizationId: orgId,
+          title: "New Item Added to Godown",
+          description: `${itemForm.name.trim()} added${Number(itemForm.initialStock) > 0 ? ` with opening stock of ${itemForm.initialStock} ${itemForm.unit}` : ""}`,
+          type: "inventory",
+        }).catch(console.error);
+      }
       goBack();
     } catch { setFormError("Failed to add item. Try again."); }
     finally { setSaving(false); }
@@ -173,7 +183,16 @@ export default function GodownPage() {
         createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(),
         syncStatus: navigator.onLine ? "synced" : "pending",
       });
-      if (!navigator.onLine) notifyOfflineSave("Stock In");
+      if (!navigator.onLine) {
+        notifyOfflineSave("Stock In");
+      } else if (orgId) {
+        createNotification({
+          organizationId: orgId,
+          title: "Godown Stock In 📦",
+          description: `+${inForm.quantity} ${selected.unit} of ${selected.name} (${inForm.source})${inForm.notes ? ` — ${inForm.notes}` : ""}`,
+          type: "inventory",
+        }).catch(console.error);
+      }
       setSuccessMsg({ title: "Stock Added! ✅", sub: `+${inForm.quantity} ${selected.unit} added to ${selected.name}` });
       setSuccess(true);
     } catch { setFormError("Failed to update stock. Try again."); }
@@ -199,7 +218,16 @@ export default function GodownPage() {
         createdBy: auth.currentUser?.uid || "", createdAt: serverTimestamp(),
         syncStatus: navigator.onLine ? "synced" : "pending",
       });
-      if (!navigator.onLine) notifyOfflineSave("Stock Out");
+      if (!navigator.onLine) {
+        notifyOfflineSave("Stock Out");
+      } else if (orgId) {
+        createNotification({
+          organizationId: orgId,
+          title: "Godown Stock Out 📤",
+          description: `−${outForm.quantity} ${selected.unit} of ${selected.name} (${outForm.reason})${outForm.notes ? ` — ${outForm.notes}` : ""}`,
+          type: "inventory",
+        }).catch(console.error);
+      }
       setSuccessMsg({ title: "Stock Out Done! 📤", sub: `−${outForm.quantity} ${selected.unit} of ${selected.name} (${outForm.reason})` });
       setSuccess(true);
     } catch { setFormError("Failed. Try again."); }
@@ -225,6 +253,14 @@ export default function GodownPage() {
         pricePerUnit: selected.pricePerUnit || 0,
         cropCycleId: txForm.cropCycleId,
       });
+      if (navigator.onLine && orgId) {
+        createNotification({
+          organizationId: orgId,
+          title: "Stock Transferred to Farmer 🚜",
+          description: `${txForm.quantity} ${selected.unit} of ${selected.name} → ${farmer?.name || "farmer"}${txForm.notes ? ` — ${txForm.notes}` : ""}`,
+          type: "inventory",
+        }).catch(console.error);
+      }
       setSuccessMsg({ title: "Transfer Done! 📦", sub: `${txForm.quantity} ${selected.unit} → ${farmer?.name}` });
       setSuccess(true);
     } catch { setFormError("Transfer failed. Try again."); }
