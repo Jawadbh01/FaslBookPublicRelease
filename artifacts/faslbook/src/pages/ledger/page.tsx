@@ -588,16 +588,23 @@ export default function LedgerPage() {
           <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-xl mb-5">{formError}</div>
         )}
 
-        {/* Category */}
-        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-2 block">Category</label>
-        <div className="border border-gray-200 rounded-2xl px-4 py-3.5 mb-5 bg-white flex items-center gap-3">
-          <span className="text-2xl">{expenseCategories[expenseForm.category]?.emoji}</span>
-          <select value={expenseForm.category} onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
-            className="flex-1 outline-none text-gray-800 text-base font-medium bg-transparent">
-            {Object.entries(expenseCategories).map(([key, cfg]) => (
-              <option key={key} value={key}>{cfg.label}</option>
-            ))}
-          </select>
+        {/* Category grid */}
+        <label className="text-gray-500 text-xs font-semibold uppercase tracking-wide mb-3 block">Category</label>
+        <div className="grid grid-cols-3 gap-2 mb-6">
+          {Object.entries(expenseCategories).map(([key, cfg]) => (
+            <button key={key} type="button" onClick={() => setExpenseForm({ ...expenseForm, category: key })}
+              className="flex flex-col items-center gap-1.5 py-3.5 rounded-2xl border-2 transition-all active:scale-95"
+              style={{
+                borderColor: expenseForm.category === key ? cfg.color : "#E5E7EB",
+                backgroundColor: expenseForm.category === key ? cfg.bg : "white",
+              }}>
+              <span className="text-2xl">{cfg.emoji}</span>
+              <span className="text-[9px] font-bold text-center leading-tight"
+                style={{ color: expenseForm.category === key ? cfg.color : "#6B7280" }}>
+                {cfg.label}
+              </span>
+            </button>
+          ))}
         </div>
 
         {/* Amount */}
