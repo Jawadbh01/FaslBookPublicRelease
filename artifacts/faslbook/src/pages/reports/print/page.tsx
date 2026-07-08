@@ -71,7 +71,7 @@ const REPORTS = [
   { key:"dealer",  label:"Dealer Report",        icon:"🤝", desc:"Purchases, payments & outstanding balance" },
   { key:"workers", label:"Workers Report",       icon:"👷", desc:"Attendance and wages for daily/monthly staff" },
   { key:"summary", label:"Farm Summary",         icon:"🏡", desc:"One-page executive overview" },
-  { key:"owner",   label:"Owner Expenses",       icon:"👤", desc:"Personal/owner expenses by date range" },
+  { key:"owner",   label:"Farm Expenses",         icon:"🚜", desc:"Owner-paid farm costs by date range" },
 ];
 
 // ── Single-field query helper (avoids composite index requirement) ───
